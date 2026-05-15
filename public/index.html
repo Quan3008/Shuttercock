@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#08090F" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="ShuttleTrack" />
+  <title>ShuttleTrack — Quản Lý Chi Phí Cầu Lông</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.5.0/Recharts.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { height: 100%; }
+    body {
+      background: #08090F;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      color: #F2F4F8;
+      min-height: 100vh;
+      overflow-x: hidden;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-font-smoothing: antialiased;
+    }
+    input, button { font-family: inherit; }
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+    input[type="number"] { -moz-appearance: textfield; }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); cursor: pointer; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+
+    @keyframes fadeUp  { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes fadeIn  { from { opacity:0; } to { opacity:1; } }
+    @keyframes scaleIn { from { opacity:0; transform:scale(0.93); } to { opacity:1; transform:scale(1); } }
+    @keyframes spin    { to { transform:rotate(360deg); } }
+    @keyframes float   { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-8px); } }
+    @keyframes blob1   { 0%,100% { transform:translate(0,0) scale(1); } 50% { transform:translate(18px,-14px) scale(1.05); } }
+    @keyframes blob2   { 0%,100% { transform:translate(0,0) scale(1); } 50% { transform:translate(-18px,12px) scale(1.04); } }
+    @keyframes pulse   { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+    .fu   { animation: fadeUp  0.38s cubic-bezier(0.22,1,0.36,1) both; }
+    .fi   { animation: fadeIn  0.25s ease both; }
+    .si   { animation: scaleIn 0.28s cubic-bezier(0.34,1.56,0.64,1) both; }
+    .s1   { animation-delay: 0.05s; }
+    .s2   { animation-delay: 0.10s; }
+    .s3   { animation-delay: 0.15s; }
+    .s4   { animation-delay: 0.20s; }
+
+    .btn-press  { transition: transform 0.12s cubic-bezier(0.34,1.56,0.64,1); }
+    .btn-press:active { transform: scale(0.95) !important; }
+    .card-press { transition: transform 0.18s ease; cursor: pointer; }
+    .card-press:active { transform: scale(0.985); }
+    .tog-anim   { transition: background 0.18s, border-color 0.18s, color 0.18s; }
+    .inp-focus:focus {
+      border-color: #7B61FF !important;
+      box-shadow: 0 0 0 3px rgba(123,97,255,0.22) !important;
+      outline: none;
+    }
+  </style>
+</head>
+<body>
+<div id="root">
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:20px;background:#08090F;">
+    <div style="width:72px;height:72px;border-radius:20px;background:linear-gradient(135deg,#7B61FF,#00D4FF);display:flex;align-items:center;justify-content:center;font-size:34px;">🏸</div>
+    <div style="width:32px;height:32px;border:3px solid rgba(123,97,255,0.3);border-top-color:#7B61FF;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+if (typeof React === 'undefined' || typeof ReactDOM === 'undefined') {
+  document.getElementById('root').innerHTML =
+    '<div style="color:#FF4E6A;padding:30px;font-family:sans-serif;text-align:center;">' +
+    '<h2>⚠️ Lỗi Tải</h2><p>Không thể tải React CDN. Vui lòng kiểm tra kết nối internet.</p></div>';
+  throw new Error('React not loaded');
+}
+
+var h        = React.createElement;
+var useState = React.useState;
+var useEffect= React.useEffect;
+var RC = (typeof Recharts !== 'undefined') ? Recharts : null;
+
+/* ── Theme ─────────────────────────────────────────────────── */
+var T = {
+  bg:'#08090F', surf:'rgba(255,255,255,0.045)', border:'rgba(255,255,255,0.08)',
+  p1:'#7B61FF', p2:'#00D4FF', green:'#00E5A0', red:'#FF4E6A',
+  amber:'#FFB547', pink:'#FF6B9D', text:'#F2F4F8',
+  muted:'rgba(242,244,248,0.42)', dim:'rgba(242,244,248,0.18)'
+};
+var GRAD  = 'linear-gradient(135deg,'+T.p1+' 0%,'+T.p2+' 100%)';
+var GRADS = 'linear-gradient(135deg,rgba(123,97,255,0.15) 0%,rgba(0,212,255,0.12) 100%)';
+var GLOW  = '0 8px 36px rgba(123,97,255,0.42)';
+var AVC   = [T.p1,T.p2,T.green,T.amber,T.pink,'#FF8C42','#6BCB77'];
+
+/* ── Local storage cache ───────────────────────────────────── */
+var LS = {
+  get: function(k) { try { var v=localStorage.getItem(k); return v?JSON.parse(v):null; } catch(e){ return null; } },
+  set: function(k,v){ try { localStorage.setItem(k,JSON.stringify(v)); } catch(e){} },
+  del: function(k)  { try { localStorage.removeItem(k); } catch(e){} }
+};
+
+/* ── API client ────────────────────────────────────────────── */
+var api = {
+  get: async function(url) {
+    var r = await fetch(url); if (!r.ok) throw new Error(r.status); return r.json();
+  },
+  post: async function(url, body) {
+    var r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    if (!r.ok) throw new Error(r.status); return r.json();
+  },
+  del: async function(url) {
+    var r = await fetch(url, { method:'DELETE' }); if (!r.ok) throw new Error(r.status); return r.json();
+  }
+};
+
+/* ── DB: localStorage cache + server sync ──────────────────── */
+var DB = {
+  /* current session user */
+  getUser:   function()  { return LS.get('st_me'); },
+  setUser:   function(u) { LS.set('st_me', u); },
+  clearUser: function()  { LS.del('st_me'); },
+
+  /* users */
+  getUsers: function() { return LS.get('st_users') || []; },
+  _cacheUser: function(u) {
+    var l = DB.getUsers();
+    var i = l.findIndex(function(x){ return x.phone === u.phone; });
+    if (i>=0) l[i]=u; else l.push(u);
+    LS.set('st_users', l);
+  },
+
+  saveUser: function(u) {
+    DB._cacheUser(u);
+    api.post('/api/users', u).catch(function(e){ console.warn('saveUser server error:', e); });
+  },
+
+  findUserByPhone: async function(phone) {
+    var local = DB.getUsers().find(function(u){ return u.phone === phone; });
+    if (local) return local;
+    try {
+      var u = await api.post('/api/users/find', { phone: phone });
+      if (u) DB._cacheUser(u);
+      return u;
+    } catch(e) { console.warn('findUser error:', e); return null; }
+  },
+
+  /* sessions */
+  getSessions: function(ph) { return LS.get('st_sess_'+ph) || []; },
+
+  saveSession: function(ph, s) {
+    var l = DB.getSessions(ph);
+    var i = l.findIndex(function(x){ return x.id === s.id; });
+    if (i>=0) l[i]=s; else l.push(s);
+    LS.set('st_sess_'+ph, l);
+    api.post('/api/sessions', Object.assign({}, s, { userPhone: ph }))
+      .catch(function(e){ console.warn('saveSession server error:', e); });
+    return l;
+  },
+
+  delSession: function(ph, id) {
+    var l = DB.getSessions(ph).filter(function(s){ return s.id !== id; });
+    LS.set('st_sess_'+ph, l);
+    api.del('/api/sessions/'+encodeURIComponent(id))
+      .catch(function(e){ console.warn('delSession server error:', e); });
+    return l;
+  },
+
+  loadSessionsFromServer: async function(ph) {
+    try {
+      var sessions = await api.get('/api/sessions/'+encodeURIComponent(ph));
+      if (Array.isArray(sessions) && sessions.length > 0) {
+        LS.set('st_sess_'+ph, sessions);
+        return sessions;
+      }
+      return null;
+    } catch(e) { console.warn('loadSessions server error:', e); return null; }
+  },
+
+  /* teams */
+  getTeams: function(ph) { return LS.get('st_teams_'+ph) || []; },
+
+  saveTeam: function(ph, t) {
+    var l = DB.getTeams(ph);
+    var i = l.findIndex(function(x){ return x.id === t.id; });
+    if (i>=0) l[i]=t; else l.push(t);
+    LS.set('st_teams_'+ph, l);
+    api.post('/api/teams', Object.assign({}, t, { userPhone: ph }))
+      .catch(function(e){ console.warn('saveTeam server error:', e); });
+    return l;
+  },
+
+  delTeam: function(ph, id) {
+    var l = DB.getTeams(ph).filter(function(t){ return t.id !== id; });
+    LS.set('st_teams_'+ph, l);
+    api.del('/api/teams/'+encodeURIComponent(id))
+      .catch(function(e){ console.warn('delTeam server error:', e); });
+    return l;
+  },
+
+  loadTeamsFromServer: async function(ph) {
+    try {
+      var teams = await api.get('/api/teams/'+encodeURIComponent(ph));
+      if (Array.isArray(teams) && teams.length > 0) {
+        LS.set('st_teams_'+ph, teams);
+        return teams;
+      }
+      return null;
+    } catch(e) { console.warn('loadTeams server error:', e); return null; }
+  }
+};
+
+/* ── Utils ─────────────────────────────────────────────────── */
+function uid()   { return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7); }
+function fmt(n)  { if (n==null) return '—'; return new Intl.NumberFormat('vi-VN').format(Math.round(n||0))+' ₫'; }
+function fmtK(n) { if (!n&&n!==0) return '0 ₫'; var v=Math.round(n); if(v>=1e6) return (v/1e6).toFixed(1)+'M ₫'; if(v>=1000) return Math.round(v/1000)+'K ₫'; return v+' ₫'; }
+function fmtD(d) { try { return new Date(d+'T00:00:00').toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit',year:'numeric'}); } catch(e){ return d||'—'; } }
+function fmtM(d) { return new Date(d).toLocaleDateString('vi-VN',{month:'long',year:'numeric'}); }
+function mKey(d) { return new Date(d).toISOString().slice(0,7); }
+function greet() { var hh=new Date().getHours(); return hh<12?'Chào buổi sáng':hh<18?'Chào buổi chiều':'Chào buổi tối'; }
+function avCol(n){ return AVC[(n||'?').charCodeAt(0)%AVC.length]; }
+function setKey(obj,key,val){ var out=Object.assign({},obj); out[key]=val; return out; }
+
+function calcSess(s) {
+  var pl=s.players||[];
+  var played=pl.filter(function(p){ return p.played; });
+  var ate=pl.filter(function(p){ return p.ate; });
+  var shuttle=(parseFloat(s.shuttleQty)||0)*(parseFloat(s.shuttlePrice)||0);
+  var sport=shuttle+(parseFloat(s.courtFee)||0);
+  var food=parseFloat(s.foodCost)||0;
+  var total=sport+food;
+  var ss=played.length?sport/played.length:0;
+  var fs=ate.length?food/ate.length:0;
+  var res=pl.map(function(p){
+    var sc=p.played?ss:0; var fc=p.ate?fs:0;
+    return { name:p.name, played:p.played, ate:p.ate, sportCost:sc, foodCost:fc, cost:sc+fc };
+  });
+  return Object.assign({},s,{ players:res, totalCost:total, sportTotal:sport, foodTotal:food });
+}
+
+function sv(size,color){ return { width:size||20, height:size||20, viewBox:'0 0 24 24', fill:'none', stroke:color||'currentColor', strokeWidth:2, strokeLinecap:'round', strokeLinejoin:'round' }; }
+
+/* ── Base components ───────────────────────────────────────── */
+function Btn(props) {
+  var variants = {
+    grad:    { background:GRAD,    color:'white', boxShadow:GLOW },
+    ghost:   { background:T.surf,  color:T.text,  border:'1px solid '+T.border },
+    danger:  { background:'rgba(255,78,106,0.12)', color:T.red, border:'1px solid rgba(255,78,106,0.28)' },
+    outline: { background:'transparent', color:T.p1, border:'1.5px solid '+T.p1 }
+  };
+  var v=props.variant||'grad'; var sm=!!props.sm; var full=!!props.full; var disabled=!!props.disabled;
+  var base={ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7, border:'none', cursor:disabled?'not-allowed':'pointer', fontFamily:'inherit', fontWeight:800, fontSize:sm?13:15, borderRadius:sm?10:14, padding:sm?'9px 16px':'14px 22px', width:full?'100%':'auto', opacity:disabled?0.45:1, transition:'all 0.15s' };
+  return h('button',{ onClick:props.onClick, disabled:disabled, className:'btn-press', style:Object.assign({},base,variants[v]||variants.grad,props.style||{}) }, props.children);
+}
+
+function Inp(props) {
+  var fs=useState(false); var focus=fs[0]; var setFocus=fs[1];
+  return h('div',{ style:{ marginBottom:14 } },
+    props.label && h('div',{ style:{ color:T.muted, fontSize:11, fontWeight:700, letterSpacing:'0.07em', textTransform:'uppercase', marginBottom:7 } }, props.label),
+    h('input',{
+      type:props.type||'text', value:props.value, placeholder:props.placeholder, readOnly:!!props.readOnly,
+      onChange:function(e){ if(props.onChange) props.onChange(e.target.value); },
+      onFocus:function(){ setFocus(true); }, onBlur:function(){ setFocus(false); },
+      className:'inp-focus',
+      style:{ width:'100%', background:T.surf, borderRadius:12, color:T.text, fontSize:15, padding:'13px 14px', outline:'none', border:'1.5px solid '+(focus?T.p1:T.border), transition:'border-color 0.2s, box-shadow 0.2s', WebkitAppearance:'none', opacity:props.readOnly?0.6:1 }
+    }),
+    props.note && h('div',{ style:{ color:T.muted, fontSize:11, marginTop:5 } }, props.note)
+  );
+}
+
+function Card(props) {
+  return h('div',{
+    onClick:props.onClick, className:(props.onClick?'card-press ':'')+( props.className||''),
+    style:Object.assign({ background:T.surf, border:'1px solid '+T.border, borderRadius:18, backdropFilter:'blur(16px)', WebkitBackdropFilter:'blur(16px)', overflow:'hidden', cursor:props.onClick?'pointer':'default' }, props.style||{})
+  }, props.children);
+}
+
+function Avatar(props) {
+  var name=props.name; var size=props.size||36; var c=avCol(name);
+  var init=(name||'?').split(' ').map(function(w){ return w[0]; }).slice(0,2).join('').toUpperCase();
+  return h('div',{ style:{ width:size, height:size, borderRadius:'50%', background:c+'1E', border:'2px solid '+c+'44', display:'flex', alignItems:'center', justifyContent:'center', fontSize:size*0.38, fontWeight:900, color:c, flexShrink:0 } }, init);
+}
+
+function Toggle(props) {
+  return h('button',{
+    onClick:props.onToggle, className:'tog-anim btn-press',
+    style:{ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 11px', borderRadius:20, border:'1.5px solid '+(props.active?T.p1:T.border), background:props.active?GRADS:'transparent', color:props.active?T.text:T.muted, fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }
+  }, props.icon, props.label);
+}
+
+function Divider(props){ return h('div',{ style:Object.assign({ height:1, background:T.border }, props&&props.style) }); }
+
+function Badge(props){ var color=props.color||T.p1; return h('span',{ style:{ padding:'3px 10px', borderRadius:20, background:color+'1E', color:color, fontSize:11, fontWeight:700 } }, props.children); }
+
+function Spinner(){ return h('div',{ style:{ width:18, height:18, flexShrink:0, border:'2.5px solid rgba(255,255,255,0.25)', borderTopColor:'white', borderRadius:'50%', animation:'spin 0.7s linear infinite' } }); }
+
+function HeroCard(props) {
+  return h('div',{
+    style:Object.assign({ background:GRAD, borderRadius:22, padding:'24px 22px', position:'relative', overflow:'hidden', boxShadow:'0 16px 60px rgba(123,97,255,0.45)', textAlign:props.center?'center':'left' }, props.style||{})
+  },
+    h('div',{ style:{ position:'absolute', top:-40, right:-40, width:150, height:150, borderRadius:'50%', background:'rgba(255,255,255,0.08)', pointerEvents:'none' } }),
+    h('div',{ style:{ position:'absolute', bottom:-50, left:10, width:100, height:100, borderRadius:'50%', background:'rgba(255,255,255,0.05)', pointerEvents:'none' } }),
+    h('p',{ style:{ color:'rgba(255,255,255,0.68)', fontSize:11, fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', margin:'0 0 9px' } }, props.label),
+    h('div',{ style:{ color:'white', fontSize:38, fontWeight:900, letterSpacing:'-1.5px', lineHeight:1 } }, props.amount),
+    props.sub && h('p',{ style:{ color:'rgba(255,255,255,0.65)', fontSize:13, margin:'10px 0 0', fontWeight:500 } }, props.sub)
+  );
+}
+
+function MiniStat(props) {
+  return h('div',{ style:{ background:T.surf, border:'1px solid '+T.border, borderRadius:14, padding:'14px 12px', flex:1, minWidth:0, overflow:'hidden' } },
+    props.icon && h('div',{ style:{ fontSize:18, marginBottom:6 } }, props.icon),
+    h('div',{ style:{ color:props.color||T.p1, fontSize:16, fontWeight:900, marginBottom:3, letterSpacing:'-0.5px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, props.value),
+    h('div',{ style:{ color:T.muted, fontSize:11, fontWeight:600 } }, props.label)
+  );
+}
+
+function PageHeader(props) {
+  return h('div',{ style:{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:22, paddingTop:2 } },
+    h('div',{ style:{ display:'flex', alignItems:'center', gap:12 } },
+      props.onBack && h('button',{ onClick:props.onBack, className:'btn-press', style:{ background:T.surf, border:'1px solid '+T.border, borderRadius:10, width:40, height:40, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0 } },
+        h('svg',sv(18,T.text),h('polyline',{ points:'15 18 9 12 15 6' }))
+      ),
+      h('h2',{ style:{ color:T.text, fontSize:19, fontWeight:900, letterSpacing:'-0.4px' } }, props.title)
+    ),
+    props.action||null
+  );
+}
+
+/* ── Server status dot ─────────────────────────────────────── */
+function ServerDot(props) {
+  var online = props.online;
+  return h('div', {
+    title: online ? 'Máy chủ: kết nối' : 'Máy chủ: mất kết nối',
+    style: {
+      width: 8, height: 8, borderRadius: '50%',
+      background: online ? T.green : T.amber,
+      animation: online ? 'none' : 'pulse 2s ease-in-out infinite',
+      flexShrink: 0
+    }
+  });
+}
+
+function NavBar(props) {
+  var active=props.active; var onNav=props.onNav; var onFab=props.onFab;
+  function makeTab(id,label,iconNodes){
+    var ac=active===id; var col=ac?T.p1:T.muted;
+    return h('button',{ key:id, onClick:function(){ onNav(id); }, style:{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:3, background:'none', border:'none', cursor:'pointer', padding:'10px 0', color:col, transition:'color 0.2s', fontFamily:'inherit' } },
+      iconNodes(col), h('span',{ style:{ fontSize:10, fontWeight:700 } }, label));
+  }
+  return h('nav',{
+    style:{ position:'fixed', bottom:0, left:0, right:0, zIndex:200, background:'rgba(8,9,15,0.95)', backdropFilter:'blur(24px)', WebkitBackdropFilter:'blur(24px)', borderTop:'1px solid '+T.border, display:'flex', alignItems:'center', paddingBottom:'8px' }
+  },
+    makeTab('home','Trang chủ',function(c){ return h('svg',sv(20,c),h('path',{d:'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'}),h('polyline',{points:'9 22 9 12 15 12 15 22'})); }),
+    makeTab('history','Lịch sử',function(c){ return h('svg',sv(20,c),h('circle',{cx:12,cy:12,r:10}),h('polyline',{points:'12 6 12 12 16 14'})); }),
+    h('div',{ style:{ flex:'0 0 72px', display:'flex', justifyContent:'center', paddingBottom:10 } },
+      h('button',{ onClick:onFab, className:'btn-press', style:{ width:56, height:56, borderRadius:'50%', background:GRAD, border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 6px 32px rgba(123,97,255,0.6)', position:'relative', top:-12 } },
+        h('svg',sv(22,'white'),h('line',{x1:12,y1:5,x2:12,y2:19}),h('line',{x1:5,y1:12,x2:19,y2:12}))
+      )
+    ),
+    makeTab('summary','Tổng kết',function(c){ return h('svg',sv(20,c),h('line',{x1:18,y1:20,x2:18,y2:10}),h('line',{x1:12,y1:20,x2:12,y2:4}),h('line',{x1:6,y1:20,x2:6,y2:14})); }),
+    makeTab('teams','Đội',function(c){ return h('svg',sv(20,c),h('path',{d:'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'}),h('circle',{cx:9,cy:7,r:4}),h('path',{d:'M23 21v-2a4 4 0 0 0-3-3.87'}),h('path',{d:'M16 3.13a4 4 0 0 1 0 7.75'})); })
+  );
+}
+
+function TopBar(props) {
+  var user=props.user; var onLogout=props.onLogout; var serverOnline=props.serverOnline;
+  return h('header',{
+    style:{ position:'sticky', top:0, zIndex:100, background:'rgba(8,9,15,0.92)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', borderBottom:'1px solid '+T.border, padding:'12px 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }
+  },
+    h('div',{ style:{ display:'flex', alignItems:'center', gap:9 } },
+      h('div',{ style:{ width:32, height:32, borderRadius:10, background:GRAD, display:'flex', alignItems:'center', justifyContent:'center', fontSize:17 } },'🏸'),
+      h('span',{ style:{ color:T.text, fontWeight:900, fontSize:17, letterSpacing:'-0.4px' } },'ShuttleTrack'),
+      h(ServerDot,{ online:serverOnline })
+    ),
+    h('div',{ style:{ display:'flex', alignItems:'center', gap:12 } },
+      h(Avatar,{ name:user.name, size:26 }),
+      h('span',{ style:{ color:T.muted, fontSize:13, fontWeight:600 } }, user.name.split(' ')[0]),
+      h('button',{
+        onClick:onLogout, className:'btn-press',
+        style:{ background:'none', border:'none', cursor:'pointer', color:T.muted, display:'flex', alignItems:'center', gap:5, fontSize:12, fontWeight:600, fontFamily:'inherit' }
+      }, h('svg',sv(15,T.muted),h('path',{d:'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4'}),h('polyline',{points:'16 17 21 12 16 7'}),h('line',{x1:21,y1:12,x2:9,y2:12})),'Đăng xuất')
+    )
+  );
+}
+
+function SessionCard(props) {
+  var s=props.session; var onClick=props.onClick;
+  var played=(s.players||[]).filter(function(p){ return p.played; });
+  var ate=(s.players||[]).filter(function(p){ return p.ate; });
+  return h(Card,{ onClick:onClick, style:{ padding:'15px 16px', marginBottom:10 } },
+    h('div',{ style:{ display:'flex', justifyContent:'space-between', alignItems:'center' } },
+      h('div',{ style:{ flex:1, minWidth:0 } },
+        h('div',{ style:{ color:T.text, fontWeight:700, fontSize:15, marginBottom:5 } }, fmtD(s.date)),
+        h('div',{ style:{ display:'flex', gap:8, flexWrap:'wrap' } },
+          h(Badge,{ color:T.p1 }, played.length+' người chơi'),
+          ate.length>0 ? h(Badge,{ color:T.amber }, ate.length+' người ăn 🍜') : null
+        )
+      ),
+      h('div',{ style:{ display:'flex', alignItems:'center', gap:8, paddingLeft:12 } },
+        h('span',{ style:{ color:T.p1, fontWeight:900, fontSize:16 } }, fmtK(s.totalCost)),
+        h('svg',sv(15,T.dim),h('polyline',{ points:'9 18 15 12 9 6' }))
+      )
+    )
+  );
+}
+
+/* ═══════════════════════════════════════════
+   LOGIN
+═══════════════════════════════════════════ */
+function LoginScreen(props) {
+  var onLogin=props.onLogin;
+  var ph=useState(''); var phone=ph[0]; var setPhone=ph[1];
+  var nm=useState(''); var name=nm[0];  var setName=nm[1];
+  var st=useState('phone'); var step=st[0]; var setStep=st[1];
+  var ld=useState(false); var loading=ld[0]; var setLoading=ld[1];
+  var er=useState(''); var err=er[0]; var setErr=er[1];
+
+  async function goCheck() {
+    var p=phone.trim();
+    if (p.length<8) { setErr('Vui lòng nhập số điện thoại hợp lệ'); return; }
+    setErr(''); setLoading(true);
+    var found=await DB.findUserByPhone(p);
+    if (found) { DB.setUser(found); onLogin(found); }
+    else { setStep('create'); setLoading(false); }
+  }
+
+  function goCreate() {
+    if (!name.trim()) { setErr('Vui lòng nhập tên của bạn'); return; }
+    setErr(''); setLoading(true);
+    var u={ id:uid(), name:name.trim(), phone:phone.trim(), createdAt:new Date().toISOString() };
+    DB.saveUser(u); DB.setUser(u); onLogin(u);
+  }
+
+  return h('div',{ className:'fi', style:{ background:T.bg, minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:'24px 20px', position:'relative', overflow:'hidden' } },
+    h('div',{ style:{ position:'absolute', top:'5%', left:'-10%', width:300, height:300, borderRadius:'50%', background:'rgba(123,97,255,0.18)', filter:'blur(60px)', animation:'blob1 12s ease-in-out infinite', pointerEvents:'none' } }),
+    h('div',{ style:{ position:'absolute', bottom:'8%', right:'-12%', width:250, height:250, borderRadius:'50%', background:'rgba(0,212,255,0.14)', filter:'blur(60px)', animation:'blob2 15s ease-in-out infinite', pointerEvents:'none' } }),
+    h('div',{ style:{ width:'100%', maxWidth:390, position:'relative', zIndex:1 } },
+      h('div',{ className:'fu', style:{ textAlign:'center', marginBottom:36 } },
+        h('div',{ style:{ width:84, height:84, borderRadius:26, background:GRAD, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 18px', fontSize:40, boxShadow:'0 18px 60px rgba(123,97,255,0.55)', animation:'float 4s ease-in-out infinite' } },'🏸'),
+        h('h1',{ style:{ color:T.text, fontSize:30, fontWeight:900, letterSpacing:'-1px', margin:'0 0 8px' } },'ShuttleTrack'),
+        h('p',{ style:{ color:T.muted, fontSize:15 } },'Quản lý chi phí cầu lông thông minh')
+      ),
+      h(Card,{ className:'fu s2', style:{ padding:28 } },
+        step==='phone'
+          ? h('div',{ key:'ph' },
+              h('h2',{ style:{ color:T.text, fontSize:21, fontWeight:900, margin:'0 0 6px' } },'Xin chào 👋'),
+              h('p',{ style:{ color:T.muted, fontSize:14, margin:'0 0 24px' } },'Nhập số điện thoại để tiếp tục'),
+              h(Inp,{ label:'Số Điện Thoại', value:phone, onChange:setPhone, type:'tel', placeholder:'VD: 0901 234 567' }),
+              err ? h('p',{ style:{ color:T.red, fontSize:13, marginBottom:12, marginTop:-6 } }, err) : null,
+              h(Btn,{ onClick:goCheck, disabled:loading||!phone.trim(), full:true }, loading?h(Spinner):null, loading?' Đang kiểm tra…':'Tiếp tục →'),
+              h('p',{ style:{ color:T.muted, fontSize:12, textAlign:'center', marginTop:16 } },'Số mới? Chúng tôi sẽ tạo tài khoản cho bạn tự động.')
+            )
+          : h('div',{ key:'cr' },
+              h('button',{ onClick:function(){ setStep('phone'); setErr(''); }, style:{ background:'none', border:'none', color:T.muted, cursor:'pointer', fontSize:13, fontWeight:600, padding:0, marginBottom:20, fontFamily:'inherit' } },'← Quay lại'),
+              h('h2',{ style:{ color:T.text, fontSize:21, fontWeight:900, margin:'0 0 6px' } },'Tài khoản mới ✨'),
+              h('p',{ style:{ color:T.muted, fontSize:14, margin:'0 0 24px' } },'Lần đầu sử dụng! Cho chúng tôi biết tên bạn.'),
+              h(Inp,{ label:'Họ và Tên', value:name, onChange:setName, placeholder:'VD: Nguyễn Văn A' }),
+              h(Inp,{ label:'Số Điện Thoại', value:phone, readOnly:true }),
+              err ? h('p',{ style:{ color:T.red, fontSize:13, marginBottom:12, marginTop:-6 } }, err) : null,
+              h(Btn,{ onClick:goCreate, disabled:loading||!name.trim(), full:true }, loading?h(Spinner):null, loading?' Đang tạo…':'🚀 Bắt Đầu Ngay')
+            )
+      )
+    )
+  );
+}
+
+/* ═══════════════════════════════════════════
+   HOME
+═══════════════════════════════════════════ */
+function HomeScreen(props) {
+  var user=props.user; var sessions=props.sessions; var onNav=props.onNav;
+  var now=new Date(); var m=mKey(now);
+  var ms=sessions.filter(function(s){ return (s.date||'').slice(0,7)===m; });
+  var mTotal=ms.reduce(function(a,s){ return a+(s.totalCost||0); },0);
+  var avg=ms.length?mTotal/ms.length:0;
+  var nMap={};
+  sessions.forEach(function(s){ (s.players||[]).forEach(function(p){ if(p.name&&p.name!==user.name) nMap[p.name]=(nMap[p.name]||0)+1; }); });
+  var topEntry=Object.entries(nMap).sort(function(a,b){ return b[1]-a[1]; })[0];
+  var topName=topEntry?topEntry[0].split(' ').slice(-1)[0]:'—';
+  var recent=sessions.slice().sort(function(a,b){ return new Date(b.date)-new Date(a.date); }).slice(0,6);
+
+  return h('div',{ className:'fi', style:{ padding:'20px 16px 120px', maxWidth:480, margin:'0 auto' } },
+    h('div',{ className:'fu', style:{ marginBottom:26 } },
+      h('p',{ style:{ color:T.muted, fontSize:14, marginBottom:4 } }, greet()+','),
+      h('h1',{ style:{ color:T.text, fontSize:28, fontWeight:900, letterSpacing:'-0.8px' } }, user.name+' 🏸')
+    ),
+    h('div',{ className:'fu s1' },
+      h(HeroCard,{ label:'Chi tiêu tháng này', amount:fmt(mTotal), sub:ms.length+' buổi · '+fmtM(now), style:{ marginBottom:16 } })
+    ),
+    h('div',{ className:'fu s2', style:{ display:'flex', gap:10, marginBottom:26 } },
+      h(MiniStat,{ label:'Số buổi', value:String(ms.length), icon:'🎯', color:T.p1 }),
+      h(MiniStat,{ label:'TB/buổi', value:fmtK(avg), icon:'💰', color:T.p2 }),
+      h(MiniStat,{ label:'Hay đánh', value:topName, icon:'👥', color:T.green })
+    ),
+    h('div',{ className:'fu s3' },
+      h('div',{ style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 } },
+        h('h3',{ style:{ color:T.text, fontSize:16, fontWeight:800 } },'Buổi Gần Đây'),
+        h('button',{ onClick:function(){ onNav('history'); }, style:{ background:'none', border:'none', color:T.p1, fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit' } },'Xem tất cả →')
+      ),
+      recent.length===0
+        ? h(Card,{ style:{ padding:'38px 20px', textAlign:'center' } },
+            h('div',{ style:{ fontSize:48, marginBottom:14, animation:'float 3s ease-in-out infinite' } },'🏸'),
+            h('div',{ style:{ color:T.muted, fontSize:14 } },'Chưa có buổi nào. Nhấn + để tạo buổi đầu tiên!')
+          )
+        : recent.map(function(s){ return h(SessionCard,{ key:s.id, session:s, onClick:function(){ onNav('detail',{ session:s }); } }); })
+    )
+  );
+}
+
+/* ═══════════════════════════════════════════
+   CREATE SESSION
+═══════════════════════════════════════════ */
+function CreateSessionScreen(props) {
+  var user=props.user; var teams=props.teams; var onSave=props.onSave; var onBack=props.onBack;
+  var draft=props.draft||{};
+
+  var d1=useState(draft.date||new Date().toISOString().slice(0,10)); var date=d1[0]; var setDate=d1[1];
+  var d2=useState(draft.qty||'');    var qty=d2[0];    var setQty=d2[1];
+  var d3=useState(draft.price||''); var price=d3[0]; var setPrice=d3[1];
+  var d4=useState(draft.court||''); var court=d4[0]; var setCourt=d4[1];
+  var d5=useState(draft.food||'');  var food=d5[0];  var setFood=d5[1];
+  var d6=useState(draft.players||[{ id:uid(), name:user.name, played:true, ate:false }]); var players=d6[0]; var setPlayers=d6[1];
+  var d7=useState(''); var newName=d7[0]; var setNewName=d7[1];
+  var d8=useState(draft.teamId||''); var teamId=d8[0]; var setTeamId=d8[1];
+
+  var sport=(parseFloat(qty)||0)*(parseFloat(price)||0)+(parseFloat(court)||0);
+  var fTotal=parseFloat(food)||0;
+  var grand=sport+fTotal;
+
+  function loadTeam(tid) {
+    setTeamId(tid); if(!tid) return;
+    var team=teams.find(function(t){ return t.id===tid; }); if(!team) return;
+    var existNames={};
+    players.forEach(function(p){ existNames[p.name.toLowerCase()]=true; });
+    var toAdd=team.members.filter(function(m){ return !existNames[m.toLowerCase()]; }).map(function(m){ return { id:uid(), name:m, played:true, ate:false }; });
+    setPlayers(function(prev){ return prev.concat(toAdd); });
+  }
+
+  function toggle(id,field){ setPlayers(function(prev){ return prev.map(function(p){ return p.id!==id?p:setKey(p,field,!p[field]); }); }); }
+  function removePlayer(id){ if(players.length<=1) return; setPlayers(function(prev){ return prev.filter(function(p){ return p.id!==id; }); }); }
+  function addPlayer(){ if(!newName.trim()) return; setPlayers(function(prev){ return prev.concat([{ id:uid(), name:newName.trim(), played:true, ate:false }]); }); setNewName(''); }
+
+  function doCalc() {
+    var stripped=players.map(function(p){ return { name:p.name, played:p.played, ate:p.ate }; });
+    var s={ id:uid(), userPhone:user.phone, date:date, shuttleQty:parseFloat(qty)||0, shuttlePrice:parseFloat(price)||0, courtFee:parseFloat(court)||0, foodCost:parseFloat(food)||0, players:stripped, teamId:teamId, createdAt:new Date().toISOString() };
+    var raw={ date:date, qty:qty, price:price, court:court, food:food, players:players, teamId:teamId };
+    onSave(calcSess(s), raw);
+  }
+
+  function PlayIcon(){ return h('svg',{width:11,height:11,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round'},h('circle',{cx:12,cy:12,r:9}),h('path',{d:'M12 7v5l3 3'})); }
+  function EatIcon(){ return h('svg',{width:11,height:11,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round'},h('path',{d:'M12 2v7'}),h('path',{d:'M5 9a7 7 0 0 0 14 0'}),h('path',{d:'M12 16v6'})); }
+  function XIcon(){ return h('svg',sv(15,T.muted),h('line',{x1:18,y1:6,x2:6,y2:18}),h('line',{x1:6,y1:6,x2:18,y2:18})); }
+
+  return h('div',{ className:'fi', style:{ padding:'20px 16px 120px', maxWidth:480, margin:'0 auto' } },
+    h(PageHeader,{ title:'Tạo Buổi Mới', onBack:onBack }),
+    h(Card,{ className:'fu', style:{ padding:'18px 18px 4px', marginBottom:14 } },
+      h(Inp,{ label:'📅 Ngày Đánh', value:date, onChange:setDate, type:'date' })
+    ),
+    h(Card,{ className:'fu s1', style:{ padding:18, marginBottom:14 } },
+      h('h3',{ style:{ color:T.text, fontSize:14, fontWeight:800, margin:'0 0 16px' } },'💸 Chi Phí'),
+      h('div',{ style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 } },
+        h(Inp,{ label:'Số Cầu', value:qty, onChange:setQty, type:'number', placeholder:'0' }),
+        h(Inp,{ label:'Giá/Cầu (₫)', value:price, onChange:setPrice, type:'number', placeholder:'0' })
+      ),
+      h(Inp,{ label:'Tiền Sân (₫)', value:court, onChange:setCourt, type:'number', placeholder:'0' }),
+      h(Inp,{ label:'Tiền Ăn/Uống (₫)', value:food, onChange:setFood, type:'number', placeholder:'0', note:'Chia đều cho người tham gia ăn' }),
+      h('div',{ style:{ background:GRADS, border:'1px solid rgba(123,97,255,0.2)', borderRadius:12, padding:'13px 15px', marginTop:4 } },
+        h('div',{ style:{ display:'flex', justifyContent:'space-between', marginBottom:6 } }, h('span',{ style:{ color:T.muted, fontSize:13 } },'🏸 Tổng thể thao'), h('span',{ style:{ color:T.text, fontSize:13, fontWeight:700 } },fmt(sport))),
+        h('div',{ style:{ display:'flex', justifyContent:'space-between', marginBottom:6 } }, h('span',{ style:{ color:T.muted, fontSize:13 } },'🍜 Tổng ăn uống'), h('span',{ style:{ color:T.text, fontSize:13, fontWeight:700 } },fmt(fTotal))),
+        h(Divider,{ style:{ margin:'8px 0' } }),
+        h('div',{ style:{ display:'flex', justifyContent:'space-between' } }, h('span',{ style:{ color:T.text, fontSize:14, fontWeight:800 } },'Tổng Cộng'), h('span',{ style:{ color:T.p1, fontSize:14, fontWeight:900 } },fmt(grand)))
+      )
+    ),
+    teams.length>0 ? h(Card,{ className:'fu s2', style:{ padding:18, marginBottom:14 } },
+      h('h3',{ style:{ color:T.text, fontSize:14, fontWeight:800, margin:'0 0 12px' } },'👥 Chọn Đội'),
+      h('div',{ style:{ display:'flex', gap:8, flexWrap:'wrap' } },
+        [{ id:'', name:'Không có' }].concat(teams).map(function(t){
+          var ac=teamId===t.id;
+          return h('button',{ key:t.id, onClick:function(){ loadTeam(t.id); }, className:'tog-anim btn-press',
+            style:{ padding:'7px 14px', borderRadius:20, border:'1.5px solid '+(ac?T.p1:T.border), background:ac?GRADS:'transparent', color:ac?T.text:T.muted, fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit' } }, t.name);
+        })
+      )
+    ) : null,
+    h(Card,{ className:'fu s3', style:{ padding:18, marginBottom:16 } },
+      h('h3',{ style:{ color:T.text, fontSize:14, fontWeight:800, margin:'0 0 14px' } },'🏸 Người Chơi ('+players.length+')'),
+      players.map(function(p){
+        return h('div',{ key:p.id, style:{ display:'flex', alignItems:'center', gap:8, marginBottom:10, padding:'11px 13px', background:'rgba(255,255,255,0.03)', borderRadius:12, border:'1px solid '+T.border } },
+          h(Avatar,{ name:p.name, size:32 }),
+          h('span',{ style:{ flex:1, color:T.text, fontWeight:700, fontSize:14, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, p.name),
+          h(Toggle,{ active:p.played, onToggle:function(){ toggle(p.id,'played'); }, label:'Đánh', icon:h(PlayIcon) }),
+          h(Toggle,{ active:p.ate,    onToggle:function(){ toggle(p.id,'ate');    }, label:'Ăn',   icon:h(EatIcon)  }),
+          players.length>1 ? h('button',{ onClick:function(){ removePlayer(p.id); }, style:{ background:'none', border:'none', cursor:'pointer', display:'flex', padding:4 } }, h(XIcon)) : null
+        );
+      }),
+      h('div',{ style:{ display:'flex', gap:8, marginTop:4 } },
+        h('input',{ value:newName, onChange:function(e){ setNewName(e.target.value); }, onKeyDown:function(e){ if(e.key==='Enter') addPlayer(); }, placeholder:'Thêm người chơi…', className:'inp-focus',
+          style:{ flex:1, background:T.surf, border:'1.5px solid '+T.border, borderRadius:10, color:T.text, fontSize:14, padding:'10px 12px', outline:'none', fontFamily:'inherit' } }),
+        h(Btn,{ onClick:addPlayer, disabled:!newName.trim(), sm:true, style:{ padding:'10px 16px' } },'+')
+      )
+    ),
+    h('div',{ className:'fu s4' },
+      h(Btn,{ onClick:doCalc, disabled:!date||!players.some(function(p){ return p.played; }), full:true, style:{ padding:'16px', fontSize:16 } },'Tính Toán & Xem Trước →')
+    )
+  );
+}
+
+/* ═══════════════════════════════════════════
+   RESULT
+═══════════════════════════════════════════ */
+function ResultScreen(props) {
+  var s=props.session; var onConfirm=props.onConfirm; var onBack=props.onBack;
+  var played=(s.players||[]).filter(function(p){ return p.played; });
+  var ate=(s.players||[]).filter(function(p){ return p.ate; });
+  var paying=(s.players||[]).filter(function(p){ return p.cost>0; });
+  var sv2=useState(false); var saving=sv2[0]; var setSaving=sv2[1];
+  function doSave(){ setSaving(true); onConfirm(); }
+
+  return h('div',{ className:'fi', style:{ padding:'20px 16px 120px', maxWidth:480, margin:'0 auto' } },
+    h(PageHeader,{ title:'Kết Quả Buổi', onBack:onBack }),
+    h('div',{ className:'fu' }, h(HeroCard,{ label:'Tổng Chi Phí Buổi', amount:fmt(s.totalCost), sub:fmtD(s.date), center:true, style:{ marginBottom:18 } })),
+    h(Card,{ className:'fu s1', style:{ padding:20, marginBottom:14 } },
+      h('h3',{ style:{ color:T.text, fontSize:14, fontWeight:800, margin:'0 0 14px' } },'Chi Tiết Chi Phí'),
+      h('div',{ style:{ display:'flex', justifyContent:'space-between', alignItems:'center', paddingBottom:12, marginBottom:12, borderBottom:'1px solid '+T.border } },
+        h('div',null, h('div',{ style:{ color:T.text, fontSize:14, fontWeight:600 } },'🏸 Thể thao — chia cho '+played.length+' người'), h('div',{ style:{ color:T.muted, fontSize:12, marginTop:2 } },'Cầu + Tiền sân')),
+        h('div',{ style:{ color:T.p1, fontWeight:900, fontSize:16, paddingLeft:12 } }, fmt(s.sportTotal))
+      ),
+      s.foodTotal>0 ? h('div',{ style:{ display:'flex', justifyContent:'space-between', alignItems:'center' } },
+        h('div',null, h('div',{ style:{ color:T.text, fontSize:14, fontWeight:600 } },'🍜 Ăn uống — chia cho '+ate.length+' người'), h('div',{ style:{ color:T.muted, fontSize:12, marginTop:2 } },'Đồ ăn & thức uống')),
+        h('div',{ style:{ color:T.p2, fontWeight:900, fontSize:16, paddingLeft:12 } }, fmt(s.foodTotal))
+      ) : null
+    ),
+    h(Card,{ className:'fu s2', style:{ padding:20, marginBottom:22 } },
+      h('h3',{ style:{ color:T.text, fontSize:14, fontWeight:800, margin:'0 0 14px' } },'Chi Phí Mỗi Người 💸'),
+      paying.map(function(p,i){
+        return h('div',{ key:i, style:{ display:'flex', alignItems:'center', gap:12, padding:'11px 0', borderBottom:i<paying.length-1?'1px solid '+T.border:'none' } },
+          h(Avatar,{ name:p.name, size:38 }),
+          h('div',{ style:{ flex:1 } },
+            h('div',{ style:{ color:T.text, fontWeight:700, fontSize:15 } }, p.name),
+            h('div',{ style:{ color:T.muted, fontSize:11, marginTop:2 } }, [p.sportCost>0&&('🏸 '+fmt(p.sportCost)), p.foodCost>0&&('🍜 '+fmt(p.foodCost))].filter(Boolean).join('  ·  '))
+          ),
+          h('div',{ style:{ color:T.p1, fontWeight:900, fontSize:19 } }, fmt(p.cost))
+        );
+      })
+    ),
+    h('div',{ className:'fu s3', style:{ display:'flex', flexDirection:'column', gap:10 } },
+      h(Btn,{ onClick:doSave, disabled:saving, full:true, style:{ padding:'16px', fontSize:16 } }, saving?h(Spinner):null, saving?' Đang lưu…':'✅ Lưu Buổi'),
+      h(Btn,{ onClick:onBack, variant:'ghost', full:true },'✏️ Sửa Lại')
+    )
+  );
+}
+
+/* ═══════════════════════════════════════════
+   HISTORY
+═══════════════════════════════════════════ */
+function HistoryScreen(props) {
+  var sessions=props.sessions; var onNav=props.onNav;
+  var sorted=sessions.slice().sort(function(a,b){ return new Date(b.date)-new Date(a.date); });
+  var byM={};
+  sorted.forEach(function(s){ var k=(s.date||'').slice(0,7)||'unknown'; if(!byM[k]) byM[k]=[]; byM[k].push(s); });
+  return h('div',{ className:'fi', style:{ padding:'20px 16px 120px', maxWidth:480, margin:'0 auto' } },
+    h(PageHeader,{ title:'Lịch Sử' }),
+    Object.keys(byM).length===0
+      ? h(Card,{ style:{ padding:'44px 20px', textAlign:'center' } }, h('div',{ style:{ fontSize:52, marginBottom:14 } },'📋'), h('div',{ style:{ color:T.muted, fontSize:15 } },'Chưa có buổi nào được ghi lại.'))
+      : Object.entries(byM).map(function(entry,gi){
+          var mo=entry[0]; var ss=entry[1];
+          return h('div',{ key:mo, className:'fu', style:{ marginBottom:28, animationDelay:gi*0.06+'s' } },
+            h('div',{ style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 } },
+              h('span',{ style:{ color:T.muted, fontSize:11, fontWeight:700, letterSpacing:'0.07em', textTransform:'uppercase' } }, mo!=='unknown'?new Date(mo+'-01').toLocaleDateString('vi-VN',{month:'long',year:'numeric'}):'Ngày không xác định'),
+              h('span',{ style:{ color:T.p1, fontSize:13, fontWeight:800 } }, fmtK(ss.reduce(function(a,s){ return a+(s.totalCost||0); },0)))
+            ),
+            ss.map(function(s){ return h(SessionCard,{ key:s.id, session:s, onClick:function(){ onNav('detail',{ session:s }); } }); })
+          );
+        })
+  );
+}
+
+/* ═══════════════════════════════════════════
+   DETAIL
+═══════════════════════════════════════════ */
+function DetailScreen(props) {
+  var s=props.session; var onBack=props.onBack; var onDelete=props.onDelete;
+  var cs=useState(false); var confirm=cs[0]; var setConfirm=cs[1];
+  var played=(s.players||[]).filter(function(p){ return p.played; });
+  var ate=(s.players||[]).filter(function(p){ return p.ate; });
+  function TrashIcon(){ return h('svg',sv(14,T.red),h('polyline',{points:'3 6 5 6 21 6'}),h('path',{d:'M19 6l-1 14H6L5 6'}),h('path',{d:'M10 11v6'}),h('path',{d:'M14 11v6'}),h('path',{d:'M9 6V4h6v2'})); }
+
+  return h('div',{ className:'fi', style:{ padding:'20px 16px 120px', maxWidth:480, margin:'0 auto' } },
+    h(PageHeader,{ title:'Chi Tiết Buổi', onBack:onBack, action:h(Btn,{ onClick:function(){ setConfirm(true); }, variant:'danger', sm:true }, h(TrashIcon),' Xoá') }),
+    confirm ? h('div',{ className:'fi', style:{ position:'fixed', top:0, right:0, bottom:0, left:0, background:'rgba(0,0,0,0.75)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:24 } },
+      h(Card,{ className:'si', style:{ padding:30, maxWidth:320, width:'100%', textAlign:'center' } },
+        h('div',{ style:{ fontSize:42, marginBottom:14 } },'🗑️'),
+        h('h3',{ style:{ color:T.text, fontSize:18, fontWeight:900, marginBottom:8 } },'Xoá buổi này?'),
+        h('p',{ style:{ color:T.muted, fontSize:14, marginBottom:24 } },'Hành động này không thể hoàn tác.'),
+        h('div',{ style:{ display:'flex', gap:10 } },
+          h(Btn,{ onClick:function(){ setConfirm(false); }, variant:'ghost', full:true },'Huỷ'),
+          h(Btn,{ onClick:onDelete, variant:'danger', full:true },'Xoá')
+        )
+      )
+    ) : null,
+    h('div',{ className:'fu' }, h(HeroCard,{ label:'Tổng Chi Phí', amount:fmt(s.totalCost), sub:fmtD(s.date)+' · '+played.length+' đánh · '+ate.length+' ăn', style:{ marginBottom:18 } })),
+    h(Card,{ className:'fu s1', style:{ padding:20, marginBottom:14 } },
+      h('h3',{ style:{ color:T.text, fontSize:14, fontWeight:800, margin:'0 0 14px' } },'Thông Tin Buổi'),
+      [['📅 Ngày',fmtD(s.date)],['🏸 Cầu',(s.shuttleQty||0)+' quả × '+fmt(s.shuttlePrice||0)],['🏟️ Tiền Sân',fmt(s.courtFee)],['🍜 Tiền Ăn',fmt(s.foodCost)],['⚡ Tổng Thể Thao',fmt(s.sportTotal)],['🍽️ Tổng Ăn Uống',fmt(s.foodTotal)],['💰 Tổng Cộng',fmt(s.totalCost)]].map(function(row,i,arr){
+        return h('div',{ key:row[0], style:{ display:'flex', justifyContent:'space-between', padding:'9px 0', borderBottom:i<arr.length-1?'1px solid '+T.border:'none' } },
+          h('span',{ style:{ color:T.muted, fontSize:13 } }, row[0]),
+          h('span',{ style:{ color:T.text, fontSize:13, fontWeight:700 } }, row[1])
+        );
+      })
+    ),
+    h(Card,{ className:'fu s2', style:{ padding:20 } },
+      h('h3',{ style:{ color:T.text, fontSize:14, fontWeight:800, margin:'0 0 14px' } },'Danh Sách Người Chơi'),
+      (s.players||[]).map(function(p,i,arr){
+        return h('div',{ key:i, style:{ display:'flex', alignItems:'center', gap:12, padding:'11px 0', borderBottom:i<arr.length-1?'1px solid '+T.border:'none' } },
+          h(Avatar,{ name:p.name, size:38 }),
+          h('div',{ style:{ flex:1 } },
+            h('div',{ style:{ color:T.text, fontWeight:700, fontSize:15 } }, p.name),
+            h('div',{ style:{ color:T.muted, fontSize:11, marginTop:2 } }, [p.played&&'🏸 Đánh', p.ate&&'🍜 Ăn'].filter(Boolean).join(' · ')||'Không tham gia')
+          ),
+          h('div',{ style:{ color:p.cost>0?T.p1:T.dim, fontWeight:900, fontSize:17 } }, p.cost>0?fmt(p.cost):'Miễn phí')
+        );
+      })
+    )
+  );
+}
+
+/* ═══════════════════════════════════════════
+   SUMMARY
+═══════════════════════════════════════════ */
+function SummaryScreen(props) {
+  var sessions=props.sessions;
+  var now=new Date(); var m=mKey(now);
+  var ms=sessions.filter(function(s){ return (s.date||'').slice(0,7)===m; });
+  var mTotal=ms.reduce(function(a,s){ return a+(s.totalCost||0); },0);
+  var avg=ms.length?mTotal/ms.length:0;
+  var allTotal=sessions.reduce(function(a,s){ return a+(s.totalCost||0); },0);
+  var nMap={};
+  sessions.forEach(function(s){ (s.players||[]).forEach(function(p){ if(p.name) nMap[p.name]=(nMap[p.name]||0)+1; }); });
+  var top5=Object.entries(nMap).sort(function(a,b){ return b[1]-a[1]; }).slice(0,6);
+  var chart=[];
+  for (var i=5;i>=0;i--) {
+    var d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    var k=d.toISOString().slice(0,7);
+    var ss=sessions.filter(function(s){ return (s.date||'').slice(0,7)===k; });
+    chart.push({ month:d.toLocaleDateString('vi-VN',{month:'short'}), total:ss.reduce(function(a,s){ return a+(s.totalCost||0); },0) });
+  }
+  function renderChart() {
+    if (!RC||!RC.ResponsiveContainer) return h('div',{ style:{ padding:'20px', textAlign:'center', color:T.muted, fontSize:13 } },'Biểu đồ không khả dụng');
+    return h(RC.ResponsiveContainer,{ width:'100%', height:170 },
+      h(RC.BarChart,{ data:chart, barSize:28, margin:{ top:0, right:12, left:0, bottom:0 } },
+        h(RC.XAxis,{ dataKey:'month', stroke:T.muted, tick:{ fill:T.muted, fontSize:11, fontFamily:'Plus Jakarta Sans' }, axisLine:false, tickLine:false }),
+        h(RC.YAxis,{ hide:true }),
+        h(RC.Tooltip,{ formatter:function(v){ return [fmtK(v),'Tổng']; }, contentStyle:{ background:'#14182E', border:'1px solid '+T.border, borderRadius:10, color:T.text, fontFamily:'Plus Jakarta Sans', fontSize:13 }, cursor:{ fill:'rgba(123,97,255,0.08)' } }),
+        h(RC.Bar,{ dataKey:'total', radius:[8,8,0,0] }, chart.map(function(_,idx){ return h(RC.Cell,{ key:idx, fill:idx===chart.length-1?T.p1:'rgba(123,97,255,0.35)' }); }))
+      )
+    );
+  }
+
+  return h('div',{ className:'fi', style:{ padding:'20px 16px 120px', maxWidth:480, margin:'0 auto' } },
+    h(PageHeader,{ title:'Tổng Kết Tháng' }),
+    h('div',{ className:'fu' }, h(HeroCard,{ label:fmtM(now).toUpperCase(), amount:fmt(mTotal), sub:ms.length+' buổi · TB '+fmtK(avg), style:{ marginBottom:16 } })),
+    h('div',{ className:'fu s1', style:{ display:'flex', gap:10, marginBottom:18 } },
+      h(MiniStat,{ label:'Tổng tất cả', value:fmtK(allTotal), color:T.p1 }),
+      h(MiniStat,{ label:'Tổng số buổi', value:String(sessions.length), color:T.p2 }),
+      h(MiniStat,{ label:'TB tháng này', value:fmtK(avg), color:T.green })
+    ),
+    h(Card,{ className:'fu s2', style:{ padding:'20px 10px 14px', marginBottom:18 } },
+      h('h3',{ style:{ color:T.text, fontSize:14, fontWeight:800, margin:'0 0 16px 10px' } },'📈 Chi Tiêu 6 Tháng'),
+      renderChart()
+    ),
+    top5.length>0 ? h(Card,{ className:'fu s3', style:{ padding:20 } },
+      h('h3',{ style:{ color:T.text, fontSize:14, fontWeight:800, margin:'0 0 14px' } },'🏆 Người Hay Đánh Nhất'),
+      top5.map(function(entry,i){
+        var nm=entry[0]; var cnt=entry[1];
+        var medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':String(i+1);
+        return h('div',{ key:nm, style:{ display:'flex', alignItems:'center', gap:12, padding:'10px 0', borderBottom:i<top5.length-1?'1px solid '+T.border:'none' } },
+          h('div',{ style:{ width:30, height:30, borderRadius:'50%', background:i===0?GRAD:T.surf, display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:i<3?14:12, fontWeight:900, flexShrink:0, border:i>0?'1px solid '+T.border:'none' } }, medal),
+          h(Avatar,{ name:nm, size:34 }),
+          h('span',{ style:{ flex:1, color:T.text, fontWeight:700, fontSize:14 } }, nm),
+          h('span',{ style:{ color:T.muted, fontSize:13, fontWeight:600 } }, cnt+'×')
+        );
+      })
+    ) : null
+  );
+}
+
+/* ═══════════════════════════════════════════
+   TEAMS
+═══════════════════════════════════════════ */
+function TeamsScreen(props) {
+  var user=props.user; var teams=props.teams; var onTeamsChange=props.onTeamsChange;
+  var v1=useState('list'); var view=v1[0]; var setView=v1[1];
+  var v2=useState('');    var tName=v2[0]; var setTName=v2[1];
+  var v3=useState('');    var mInput=v3[0]; var setMInput=v3[1];
+  var v4=useState([user.name]); var members=v4[0]; var setMembers=v4[1];
+  var v5=useState(false); var loading=v5[0]; var setLoading=v5[1];
+
+  function addMember(){ if(!mInput.trim()) return; setMembers(function(p){ return p.concat([mInput.trim()]); }); setMInput(''); }
+  function removeMember(i){ setMembers(function(p){ return p.filter(function(_,j){ return j!==i; }); }); }
+  function doCreate() {
+    if (!tName.trim()||members.length===0) return; setLoading(true);
+    var t={ id:uid(), name:tName.trim(), members:members, ownerPhone:user.phone, createdAt:new Date().toISOString() };
+    onTeamsChange(DB.saveTeam(user.phone,t));
+    setView('list'); setTName(''); setMembers([user.name]); setLoading(false);
+  }
+  function doDelete(tid){ onTeamsChange(DB.delTeam(user.phone,tid)); }
+
+  function XIcon(){ return h('svg',sv(15,T.muted),h('line',{x1:18,y1:6,x2:6,y2:18}),h('line',{x1:6,y1:6,x2:18,y2:18})); }
+  function TrashIcon(){ return h('svg',sv(16,T.red),h('polyline',{points:'3 6 5 6 21 6'}),h('path',{d:'M19 6l-1 14H6L5 6'}),h('path',{d:'M10 11v6'}),h('path',{d:'M14 11v6'}),h('path',{d:'M9 6V4h6v2'})); }
+  function PlusIcon(){ return h('svg',sv(14,'white'),h('line',{x1:12,y1:5,x2:12,y2:19}),h('line',{x1:5,y1:12,x2:19,y2:12})); }
+
+  if (view==='create') {
+    return h('div',{ className:'fi', style:{ padding:'20px 16px 120px', maxWidth:480, margin:'0 auto' } },
+      h(PageHeader,{ title:'Tạo Đội Mới', onBack:function(){ setView('list'); } }),
+      h(Card,{ className:'fu', style:{ padding:20, marginBottom:14 } },
+        h(Inp,{ label:'Tên Đội', value:tName, onChange:setTName, placeholder:'VD: Đội Thứ Hai' })
+      ),
+      h(Card,{ className:'fu s1', style:{ padding:20, marginBottom:14 } },
+        h('h3',{ style:{ color:T.text, fontSize:14, fontWeight:800, margin:'0 0 14px' } },'Thành Viên ('+members.length+')'),
+        members.map(function(m,i){
+          return h('div',{ key:i, style:{ display:'flex', alignItems:'center', gap:10, padding:'10px 13px', background:'rgba(255,255,255,0.03)', borderRadius:10, marginBottom:8, border:'1px solid '+T.border } },
+            h(Avatar,{ name:m, size:30 }),
+            h('span',{ style:{ flex:1, color:T.text, fontSize:14, fontWeight:600 } }, m, i===0?h('span',{ style:{ color:T.muted, fontSize:12, marginLeft:6 } },'(bạn)'):null),
+            i>0 ? h('button',{ onClick:function(){ removeMember(i); }, style:{ background:'none', border:'none', cursor:'pointer', display:'flex', padding:4 } }, h(XIcon)) : null
+          );
+        }),
+        h('div',{ style:{ display:'flex', gap:8, marginTop:4 } },
+          h('input',{ value:mInput, onChange:function(e){ setMInput(e.target.value); }, onKeyDown:function(e){ if(e.key==='Enter') addMember(); }, placeholder:'Thêm thành viên…', className:'inp-focus', style:{ flex:1, background:T.surf, border:'1.5px solid '+T.border, borderRadius:10, color:T.text, fontSize:14, padding:'10px 12px', outline:'none', fontFamily:'inherit' } }),
+          h(Btn,{ onClick:addMember, disabled:!mInput.trim(), sm:true, style:{ padding:'10px 16px' } },'+')
+        )
+      ),
+      h('div',{ className:'fu s2' },
+        h(Btn,{ onClick:doCreate, disabled:loading||!tName.trim(), full:true, style:{ padding:'15px' } }, loading?h(Spinner):null, loading?' Đang tạo…':'✅ Tạo Đội')
+      )
+    );
+  }
+
+  return h('div',{ className:'fi', style:{ padding:'20px 16px 120px', maxWidth:480, margin:'0 auto' } },
+    h(PageHeader,{ title:'Đội Của Tôi', action:h(Btn,{ onClick:function(){ setView('create'); }, sm:true }, h(PlusIcon),' Tạo mới') }),
+    teams.length===0
+      ? h(Card,{ style:{ padding:'44px 20px', textAlign:'center' } },
+          h('div',{ style:{ fontSize:52, marginBottom:14 } },'👥'),
+          h('div',{ style:{ color:T.muted, fontSize:14, marginBottom:22, lineHeight:1.6 } },'Tạo đội để nhanh chóng tải danh sách người chơi thường xuyên!'),
+          h(Btn,{ onClick:function(){ setView('create'); }, style:{ margin:'0 auto' } },'+ Tạo Đội')
+        )
+      : teams.map(function(t,gi){
+          return h(Card,{ key:t.id, className:'fu', style:{ padding:18, marginBottom:12, animationDelay:gi*0.06+'s' } },
+            h('div',{ style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12 } },
+              h('div',{ style:{ flex:1 } },
+                h('div',{ style:{ color:T.text, fontWeight:900, fontSize:17, marginBottom:12 } }, t.name),
+                h('div',{ style:{ display:'flex', flexWrap:'wrap', gap:7 } },
+                  t.members.map(function(m,i){ return h('div',{ key:i, style:{ display:'flex', alignItems:'center', gap:5, background:GRADS, padding:'4px 10px', borderRadius:20, border:'1px solid rgba(123,97,255,0.2)' } }, h(Avatar,{ name:m, size:18 }), h('span',{ style:{ fontSize:12, color:T.text, fontWeight:700 } }, m)); })
+                ),
+                h('div',{ style:{ color:T.muted, fontSize:11, marginTop:10 } }, t.members.length+' thành viên')
+              ),
+              h('button',{ onClick:function(){ doDelete(t.id); }, className:'btn-press', style:{ background:'none', border:'none', cursor:'pointer', padding:4, display:'flex' } }, h(TrashIcon))
+            )
+          );
+        })
+  );
+}
+
+/* ═══════════════════════════════════════════
+   ROOT APP
+═══════════════════════════════════════════ */
+function App() {
+  var s1=useState(null);   var user=s1[0];     var setUser=s1[1];
+  var s2=useState([]);     var sessions=s2[0]; var setSessions=s2[1];
+  var s3=useState([]);     var teams=s3[0];    var setTeams=s3[1];
+  var s4=useState('boot'); var screen=s4[0];   var setScreen=s4[1];
+  var s5=useState({});     var params=s5[0];   var setParams=s5[1];
+  var s6=useState(null);   var pending=s6[0];  var setPending=s6[1];
+  var s7=useState(null);   var draft=s7[0];    var setDraft=s7[1];
+  var s8=useState(true);   var serverOnline=s8[0]; var setServerOnline=s8[1];
+
+  /* poll server health every 30s */
+  useEffect(function() {
+    function ping() {
+      fetch('/api/health').then(function(r){ setServerOnline(r.ok); }).catch(function(){ setServerOnline(false); });
+    }
+    ping();
+    var iv = setInterval(ping, 30000);
+    return function(){ clearInterval(iv); };
+  }, []);
+
+  useEffect(function() {
+    var u=DB.getUser();
+    if (u) {
+      setUser(u);
+      setSessions(DB.getSessions(u.phone));
+      setTeams(DB.getTeams(u.phone));
+      setScreen('home');
+      DB.loadSessionsFromServer(u.phone).then(function(ss){ if(ss) setSessions(ss); });
+      DB.loadTeamsFromServer(u.phone).then(function(ts){ if(ts) setTeams(ts); });
+    } else {
+      setScreen('login');
+    }
+  }, []);
+
+  function login(u) {
+    setUser(u); setSessions(DB.getSessions(u.phone)); setTeams(DB.getTeams(u.phone)); setScreen('home');
+    DB.loadSessionsFromServer(u.phone).then(function(ss){ if(ss) setSessions(ss); });
+    DB.loadTeamsFromServer(u.phone).then(function(ts){ if(ts) setTeams(ts); });
+  }
+  function logout() { DB.clearUser(); setUser(null); setSessions([]); setTeams([]); setScreen('login'); }
+  function nav(s,p) { setScreen(s); setParams(p||{}); }
+  function onCalc(calc,raw) { setDraft(raw); setPending(calc); setScreen('result'); }
+  function onSave() { var upd=DB.saveSession(user.phone,pending); setSessions(upd); setPending(null); setDraft(null); setScreen('home'); }
+  function onDel()  { var upd=DB.delSession(user.phone,params.session.id); setSessions(upd); setScreen('history'); }
+
+  if (screen==='boot') {
+    return h('div',{ style:{ background:T.bg, minHeight:'100vh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:22 } },
+      h('div',{ style:{ width:72, height:72, borderRadius:22, background:GRAD, display:'flex', alignItems:'center', justifyContent:'center', fontSize:34, boxShadow:GLOW, animation:'float 3s ease-in-out infinite' } },'🏸'),
+      h('div',{ style:{ width:34, height:34, border:'3px solid rgba(123,97,255,0.25)', borderTopColor:T.p1, borderRadius:'50%', animation:'spin 0.8s linear infinite' } })
+    );
+  }
+
+  if (screen==='login') return h(LoginScreen,{ onLogin:login });
+
+  var mainTabs=['home','history','summary','teams'];
+  var showNav=mainTabs.indexOf(screen)>=0;
+  var content=null;
+  if      (screen==='home')    content=h(HomeScreen,         { user:user, sessions:sessions, onNav:nav });
+  else if (screen==='history') content=h(HistoryScreen,      { sessions:sessions, onNav:nav });
+  else if (screen==='summary') content=h(SummaryScreen,      { sessions:sessions });
+  else if (screen==='teams')   content=h(TeamsScreen,        { user:user, teams:teams, onTeamsChange:setTeams });
+  else if (screen==='create')  content=h(CreateSessionScreen,{ user:user, teams:teams, onSave:onCalc, onBack:function(){ setDraft(null); setScreen('home'); }, draft:draft });
+  else if (screen==='result'&&pending) content=h(ResultScreen,{ session:pending, onConfirm:onSave, onBack:function(){ setScreen('create'); } });
+  else if (screen==='detail'&&params.session) content=h(DetailScreen,{ session:params.session, onBack:function(){ setScreen('history'); }, onDelete:onDel });
+
+  return h('div',{ style:{ background:T.bg, minHeight:'100vh', fontFamily:"'Plus Jakarta Sans',system-ui,sans-serif", color:T.text } },
+    showNav ? h(TopBar,{ user:user, onLogout:logout, serverOnline:serverOnline }) : null,
+    content,
+    showNav ? h(NavBar,{ active:screen, onNav:nav, onFab:function(){ nav('create'); } }) : null
+  );
+}
+
+/* ── Mount ─────────────────────────────────────────────────── */
+function mountApp() {
+  try {
+    ReactDOM.createRoot(document.getElementById('root')).render(h(App, null));
+  } catch(e) {
+    document.getElementById('root').innerHTML =
+      '<div style="color:#FF4E6A;padding:30px;font-family:sans-serif;background:#08090F;min-height:100vh;">' +
+      '<h2 style="margin-bottom:12px">⚠️ Lỗi Khởi Động</h2>' +
+      '<pre style="background:rgba(255,255,255,0.05);padding:16px;border-radius:8px;font-size:13px;white-space:pre-wrap;">'+e.message+'</pre>' +
+      '</div>';
+  }
+}
+
+if (document.readyState==='complete'||document.readyState==='interactive') { mountApp(); }
+else { window.addEventListener('DOMContentLoaded', mountApp); }
+</script>
+</body>
+</html>
