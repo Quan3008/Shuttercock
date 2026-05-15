@@ -57,11 +57,30 @@ async function ensureTables() {
       created_at  TEXT NOT NULL
     )`;
   await sql`CREATE INDEX IF NOT EXISTS idx_teams_phone ON teams(user_phone)`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS members (
+      id                    TEXT PRIMARY KEY,
+      name                  TEXT NOT NULL,
+      phone_number          TEXT NOT NULL DEFAULT '',
+      created_by_user_phone TEXT NOT NULL,
+      created_at            TEXT NOT NULL
+    )`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_members_user ON members(created_by_user_phone)`;
   _tablesReady = true;
   console.log('✅ Tables ready');
 }
 
 /* ── Row mappers ────────────────────────────────────────────── */
+function rowToMember(r) {
+  return {
+    id:                  r.id,
+    name:                r.name,
+    phoneNumber:         r.phone_number,
+    createdByUserPhone:  r.created_by_user_phone,
+    createdAt:           r.created_at
+  };
+}
+
 function rowToSession(r) {
   return {
     id:           r.id,
@@ -209,6 +228,40 @@ app.delete('/api/teams/:id', async (req, res) => {
     await sql`DELETE FROM teams WHERE id = ${req.params.id}`;
     res.json({ ok: true });
   } catch (e) { console.error('deleteTeam:', e.message); res.status(500).json({ error: e.message }); }
+});
+
+/* ── API: Members ───────────────────────────────────────────── */
+app.get('/api/members/:phone', async (req, res) => {
+  try {
+    const sql = getSql();
+    const phone = decodeURIComponent(req.params.phone);
+    const rows = await sql`SELECT * FROM members WHERE created_by_user_phone = ${phone} ORDER BY name ASC`;
+    res.json(rows.map(rowToMember));
+  } catch (e) { console.error('getMembers:', e.message); res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/members', async (req, res) => {
+  try {
+    const m = req.body;
+    if (!m.id || !m.createdByUserPhone) return res.status(400).json({ error: 'id and createdByUserPhone required' });
+    const sql = getSql();
+    await sql`
+      INSERT INTO members (id, name, phone_number, created_by_user_phone, created_at)
+      VALUES (
+        ${m.id}, ${m.name || ''}, ${m.phoneNumber || ''},
+        ${m.createdByUserPhone}, ${m.createdAt || new Date().toISOString()}
+      )
+      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, phone_number = EXCLUDED.phone_number`;
+    res.json({ ok: true });
+  } catch (e) { console.error('saveMember:', e.message); res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/members/:id', async (req, res) => {
+  try {
+    const sql = getSql();
+    await sql`DELETE FROM members WHERE id = ${req.params.id}`;
+    res.json({ ok: true });
+  } catch (e) { console.error('deleteMember:', e.message); res.status(500).json({ error: e.message }); }
 });
 
 /* ── Health check ───────────────────────────────────────────── */
