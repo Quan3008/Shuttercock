@@ -230,6 +230,23 @@ app.delete('/api/teams/:id', async (req, res) => {
   } catch (e) { console.error('deleteTeam:', e.message); res.status(500).json({ error: e.message }); }
 });
 
+/* ── API: Contacts (registered users + manual members) ─────── */
+app.get('/api/contacts/:phone', async (req, res) => {
+  try {
+    const sql = getSql();
+    const phone = decodeURIComponent(req.params.phone);
+    const [users, members] = await Promise.all([
+      sql`SELECT id, name, phone AS phone_number, created_at FROM users ORDER BY name ASC`,
+      sql`SELECT id, name, phone_number, created_at FROM members WHERE created_by_user_phone = ${phone} ORDER BY created_at DESC`
+    ]);
+    const contacts = [
+      ...users.map(u => ({ id: u.id, name: u.name, phoneNumber: u.phone_number, type: 'registered', createdAt: u.created_at })),
+      ...members.map(m => ({ id: m.id, name: m.name, phoneNumber: m.phone_number, type: 'manual', createdAt: m.created_at }))
+    ];
+    res.json(contacts);
+  } catch (e) { console.error('getContacts:', e.message); res.status(500).json({ error: e.message }); }
+});
+
 /* ── API: Members ───────────────────────────────────────────── */
 app.get('/api/members/:phone', async (req, res) => {
   try {

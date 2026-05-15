@@ -457,12 +457,12 @@ function MemberSelector(props) {
   /* on open: localStorage instantly → server in background */
   useEffect(function(){
     var ph=props.userPhone; if(!ph) return;
-    var cached=LS.get('st_members_'+ph)||[];
+    var cached=LS.get('st_contacts_'+ph)||[];
     if(cached.length>0){ setMembers(cached); setLoading(false); }
-    api.get('/api/members/'+encodeURIComponent(ph))
+    api.get('/api/contacts/'+encodeURIComponent(ph))
       .then(function(fetched){
         if(Array.isArray(fetched)){
-          LS.set('st_members_'+ph, fetched);
+          LS.set('st_contacts_'+ph, fetched);
           setMembers(fetched);
           if(props.onMembersRefresh) props.onMembersRefresh(fetched);
         }
@@ -485,8 +485,10 @@ function MemberSelector(props) {
 
   function commitAdd(){
     var nm=newName.trim(); if(!nm) return;
-    var m={ id:uid(), name:nm, phoneNumber:'', createdByUserPhone:props.userPhone||'', createdAt:new Date().toISOString() };
+    var m={ id:uid(), name:nm, phoneNumber:'', createdByUserPhone:props.userPhone||'', createdAt:new Date().toISOString(), type:'manual' };
     setMembers(function(prev){ return prev.some(function(x){ return x.name===nm; })?prev:[m].concat(prev); });
+    /* invalidate contacts cache so next open re-fetches */
+    if(props.userPhone) LS.del('st_contacts_'+props.userPhone);
     props.onAddMember(m);
     setPicked(function(prev){ return prev.indexOf(nm)>=0?prev:prev.concat([nm]); });
     setNewName(''); setShowAdd(false);
@@ -543,6 +545,10 @@ function MemberSelector(props) {
         /* member rows */
         list.map(function(m){
           var isSel=picked.indexOf(m.name)>=0;
+          var isReg=m.type==='registered';
+          var badge=isReg
+            ? h('span',{ style:{ fontSize:10,fontWeight:800,color:T.p2,background:'rgba(0,212,255,0.12)',border:'1px solid rgba(0,212,255,0.22)',padding:'2px 8px',borderRadius:20,whiteSpace:'nowrap',flexShrink:0 } },'📱 Đã đăng ký')
+            : h('span',{ style:{ fontSize:10,fontWeight:800,color:T.amber,background:'rgba(255,181,71,0.12)',border:'1px solid rgba(255,181,71,0.22)',padding:'2px 8px',borderRadius:20,whiteSpace:'nowrap',flexShrink:0 } },'✏️ Thủ công');
           return h('div',{ key:m.id, onClick:function(){ toggleMember(m.name); }, className:'card-press',
             style:{ display:'flex',alignItems:'center',gap:12,padding:'12px 14px',marginBottom:8,
               background:isSel?GRADS:T.surf, border:'1.5px solid '+(isSel?T.p1:T.border),
@@ -550,8 +556,11 @@ function MemberSelector(props) {
           },
             h(Avatar,{ name:m.name,size:38 }),
             h('div',{ style:{ flex:1,minWidth:0 } },
-              h('div',{ style:{ color:T.text,fontSize:15,fontWeight:700 } }, m.name),
-              m.phoneNumber ? h('div',{ style:{ color:T.muted,fontSize:12,marginTop:2 } }, m.phoneNumber) : null
+              h('div',{ style:{ display:'flex',alignItems:'center',gap:7,flexWrap:'wrap' } },
+                h('span',{ style:{ color:T.text,fontSize:15,fontWeight:700 } }, m.name),
+                badge
+              ),
+              m.phoneNumber ? h('div',{ style:{ color:T.muted,fontSize:12,marginTop:3 } }, m.phoneNumber) : null
             ),
             h('div',{ style:{ width:24,height:24,borderRadius:'50%',flexShrink:0,
               border:'2px solid '+(isSel?T.p1:'rgba(255,255,255,0.2)'),
