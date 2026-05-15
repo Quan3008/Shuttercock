@@ -596,7 +596,10 @@ function MemberSelector(props) {
                 display:'flex',alignItems:'center',justifyContent:'center',gap:7 } },
               h('svg',sv(14,T.muted),h('line',{x1:12,y1:5,x2:12,y2:19}),h('line',{x1:5,y1:12,x2:19,y2:12})),' Thêm người mới'
             ),
-        h(Btn,{ onClick:function(){ props.onConfirm(picked); }, disabled:picked.length===0, full:true, style:{ padding:'15px' } },
+        h(Btn,{ onClick:function(){
+          var pickedObjs=list.filter(function(m){ return picked.indexOf(m.name)>=0; });
+          props.onConfirm(pickedObjs);
+        }, disabled:picked.length===0, full:true, style:{ padding:'15px' } },
           picked.length>0 ? '✅ Xác Nhận ('+picked.length+' người)' : 'Chọn ít nhất 1 người'
         )
       )
@@ -741,11 +744,14 @@ function CreateSessionScreen(props) {
   function toggle(id,field){ setPlayers(function(prev){ return prev.map(function(p){ return p.id!==id?p:setKey(p,field,!p[field]); }); }); }
   function removePlayer(id){ if(players.length<=1) return; setPlayers(function(prev){ return prev.filter(function(p){ return p.id!==id; }); }); }
 
-  function onSelectorConfirm(pickedNames) {
+  function onSelectorConfirm(pickedObjs) {
     setPlayers(function(prev){
       var prevMap={};
       prev.forEach(function(p){ prevMap[p.name]=p; });
-      return pickedNames.map(function(name){ return prevMap[name]||{ id:uid(), name:name, played:true, ate:false }; });
+      return pickedObjs.map(function(o){
+        var name=o.name||o;
+        return prevMap[name]||{ id:uid(), name:name, played:true, ate:false };
+      });
     });
     setShowSelector(false);
   }
@@ -1021,23 +1027,31 @@ function TeamsScreen(props) {
   var allMembers=props.allMembers||[]; var onAddMember=props.onAddMember;
   var v1=useState('list'); var view=v1[0]; var setView=v1[1];
   var v2=useState('');    var tName=v2[0]; var setTName=v2[1];
-  var v4=useState([user.name]); var members=v4[0]; var setMembers=v4[1];
+  /* members stored as {name, phoneNumber, type} objects */
+  var v4=useState([{ name:user.name, phoneNumber:user.phone, type:'registered' }]);
+  var members=v4[0]; var setMembers=v4[1];
   var v5=useState(false); var loading=v5[0]; var setLoading=v5[1];
   var ss=useState(false); var showSelector=ss[0]; var setShowSelector=ss[1];
 
   function removeMember(i){ setMembers(function(p){ return p.filter(function(_,j){ return j!==i; }); }); }
+
   function doCreate() {
     if (!tName.trim()||members.length===0) return; setLoading(true);
-    var t={ id:uid(), name:tName.trim(), members:members, ownerPhone:user.phone, createdAt:new Date().toISOString() };
+    var memberNames=members.map(function(m){ return typeof m==='string'?m:m.name; });
+    /* phones of registered members (excluding owner — owner's membership is implicit) */
+    var memberPhones=members
+      .filter(function(m){ return m.type==='registered' && m.phoneNumber && m.phoneNumber!==user.phone; })
+      .map(function(m){ return m.phoneNumber; });
+    var t={ id:uid(), name:tName.trim(), members:memberNames, memberPhones:memberPhones, ownerPhone:user.phone, createdAt:new Date().toISOString() };
     onTeamsChange(DB.saveTeam(user.phone,t));
-    setView('list'); setTName(''); setMembers([user.name]); setLoading(false);
+    setView('list'); setTName(''); setMembers([{ name:user.name, phoneNumber:user.phone, type:'registered' }]); setLoading(false);
   }
+
   function doDelete(tid){ onTeamsChange(DB.delTeam(user.phone,tid)); }
 
-  function onSelectorConfirm(pickedNames) {
-    /* always keep owner as first member */
-    var ownerIncluded=pickedNames.indexOf(user.name)>=0;
-    var result=ownerIncluded?pickedNames:[user.name].concat(pickedNames);
+  function onSelectorConfirm(pickedObjs) {
+    var ownerIncluded=pickedObjs.some(function(o){ return o.name===user.name; });
+    var result=ownerIncluded?pickedObjs:[{ name:user.name, phoneNumber:user.phone, type:'registered' }].concat(pickedObjs);
     setMembers(result);
     setShowSelector(false);
   }
@@ -1074,9 +1088,10 @@ function TeamsScreen(props) {
           )
         ),
         members.map(function(m,i){
+          var mName=typeof m==='string'?m:m.name;
           return h('div',{ key:i, style:{ display:'flex', alignItems:'center', gap:10, padding:'10px 13px', background:'rgba(255,255,255,0.03)', borderRadius:10, marginBottom:8, border:'1px solid '+T.border } },
-            h(Avatar,{ name:m, size:30 }),
-            h('span',{ style:{ flex:1, color:T.text, fontSize:14, fontWeight:600 } }, m, i===0?h('span',{ style:{ color:T.muted, fontSize:12, marginLeft:6 } },'(bạn)'):null),
+            h(Avatar,{ name:mName, size:30 }),
+            h('span',{ style:{ flex:1, color:T.text, fontSize:14, fontWeight:600 } }, mName, i===0?h('span',{ style:{ color:T.muted, fontSize:12, marginLeft:6 } },'(bạn)'):null),
             i>0 ? h('button',{ onClick:function(){ removeMember(i); }, style:{ background:'none', border:'none', cursor:'pointer', display:'flex', padding:4 } }, h(XIcon)) : null
           );
         }),
@@ -1104,13 +1119,16 @@ function TeamsScreen(props) {
           return h(Card,{ key:t.id, className:'fu', style:{ padding:18, marginBottom:12, animationDelay:gi*0.06+'s' } },
             h('div',{ style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12 } },
               h('div',{ style:{ flex:1 } },
-                h('div',{ style:{ color:T.text, fontWeight:900, fontSize:17, marginBottom:12 } }, t.name),
+                h('div',{ style:{ display:'flex', alignItems:'center', gap:8, marginBottom:12 } },
+                  h('span',{ style:{ color:T.text, fontWeight:900, fontSize:17 } }, t.name),
+                  !t.isOwner ? h('span',{ style:{ fontSize:10, fontWeight:800, color:'#f59e0b', background:'rgba(245,158,11,0.12)', border:'1px solid rgba(245,158,11,0.25)', padding:'2px 8px', borderRadius:20 } },'Thành Viên') : null
+                ),
                 h('div',{ style:{ display:'flex', flexWrap:'wrap', gap:7 } },
                   t.members.map(function(m,i){ return h('div',{ key:i, style:{ display:'flex', alignItems:'center', gap:5, background:GRADS, padding:'4px 10px', borderRadius:20, border:'1px solid rgba(123,97,255,0.2)' } }, h(Avatar,{ name:m, size:18 }), h('span',{ style:{ fontSize:12, color:T.text, fontWeight:700 } }, m)); })
                 ),
                 h('div',{ style:{ color:T.muted, fontSize:11, marginTop:10 } }, t.members.length+' thành viên')
               ),
-              h('button',{ onClick:function(){ doDelete(t.id); }, className:'btn-press', style:{ background:'none', border:'none', cursor:'pointer', padding:4, display:'flex' } }, h(TrashIcon))
+              t.isOwner ? h('button',{ onClick:function(){ doDelete(t.id); }, className:'btn-press', style:{ background:'none', border:'none', cursor:'pointer', padding:4, display:'flex' } }, h(TrashIcon)) : null
             )
           );
         })

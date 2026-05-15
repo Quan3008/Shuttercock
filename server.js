@@ -58,6 +58,13 @@ async function ensureTables() {
     )`;
   await sql`CREATE INDEX IF NOT EXISTS idx_teams_phone ON teams(user_phone)`;
   await sql`
+    CREATE TABLE IF NOT EXISTS team_memberships (
+      team_id    TEXT NOT NULL,
+      user_phone TEXT NOT NULL,
+      PRIMARY KEY (team_id, user_phone)
+    )`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_tm_phone ON team_memberships(user_phone)`;
+  await sql`
     CREATE TABLE IF NOT EXISTS members (
       id                    TEXT PRIMARY KEY,
       name                  TEXT NOT NULL,
@@ -106,6 +113,7 @@ function rowToTeam(r) {
     name:       r.name,
     members:    typeof r.members === 'string' ? JSON.parse(r.members) : (r.members || []),
     ownerPhone: r.owner_phone,
+    isOwner:    r.is_owner === true || r.is_owner === 't' || r.is_owner === 1,
     createdAt:  r.created_at
   };
 }
@@ -114,7 +122,6 @@ function rowToTeam(r) {
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Ensure tables exist before any API call (lazy, once per cold start)
 app.use('/api', async (req, res, next) => {
   try {
     await ensureTables();
@@ -199,7 +206,16 @@ app.get('/api/teams/:phone', async (req, res) => {
   try {
     const sql = getSql();
     const phone = decodeURIComponent(req.params.phone);
-    const rows = await sql`SELECT * FROM teams WHERE user_phone = ${phone} ORDER BY created_at DESC`;
+    // Return teams the user owns OR is a member of, with is_owner flag
+    const rows = await sql`
+      SELECT t.*, (t.owner_phone = ${phone}) AS is_owner
+      FROM teams t
+      WHERE t.owner_phone = ${phone}
+         OR t.id IN (
+           SELECT team_id FROM team_memberships WHERE user_phone = ${phone}
+         )
+      ORDER BY t.created_at DESC
+    `;
     res.json(rows.map(rowToTeam));
   } catch (e) { console.error('getTeams:', e.message); res.status(500).json({ error: e.message }); }
 });
@@ -209,6 +225,7 @@ app.post('/api/teams', async (req, res) => {
     const t = req.body;
     if (!t.id || !t.userPhone) return res.status(400).json({ error: 'id and userPhone required' });
     const sql = getSql();
+    // Upsert team
     await sql`
       INSERT INTO teams (id, user_phone, name, members, owner_phone, created_at)
       VALUES (
@@ -218,6 +235,17 @@ app.post('/api/teams', async (req, res) => {
         ${t.createdAt || new Date().toISOString()}
       )
       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, members = EXCLUDED.members`;
+    // Sync memberships for registered users who are members of this team
+    const memberPhones = Array.isArray(t.memberPhones)
+      ? t.memberPhones.filter(p => p && p !== t.userPhone)
+      : [];
+    await sql`DELETE FROM team_memberships WHERE team_id = ${t.id}`;
+    for (const phone of memberPhones) {
+      await sql`
+        INSERT INTO team_memberships (team_id, user_phone)
+        VALUES (${t.id}, ${phone})
+        ON CONFLICT DO NOTHING`;
+    }
     res.json({ ok: true });
   } catch (e) { console.error('saveTeam:', e.message); res.status(500).json({ error: e.message }); }
 });
@@ -225,6 +253,7 @@ app.post('/api/teams', async (req, res) => {
 app.delete('/api/teams/:id', async (req, res) => {
   try {
     const sql = getSql();
+    await sql`DELETE FROM team_memberships WHERE team_id = ${req.params.id}`;
     await sql`DELETE FROM teams WHERE id = ${req.params.id}`;
     res.json({ ok: true });
   } catch (e) { console.error('deleteTeam:', e.message); res.status(500).json({ error: e.message }); }
