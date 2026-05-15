@@ -379,17 +379,21 @@ function ServerDot(props) {
 }
 
 function NavBar(props) {
-  var active=props.active; var onNav=props.onNav; var onFab=props.onFab;
+  var active=props.active; var onNav=props.onNav; var onFab=props.onFab; var isAdmin=props.isAdmin;
   function makeTab(id,label,iconNodes){
     var ac=active===id; var col=ac?T.p1:T.muted;
     return h('button',{ key:id, onClick:function(){ onNav(id); }, style:{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:3, background:'none', border:'none', cursor:'pointer', padding:'10px 0', color:col, transition:'color 0.2s', fontFamily:'inherit' } },
       iconNodes(col), h('span',{ style:{ fontSize:10, fontWeight:700 } }, label));
   }
+  /* Admin nav: Trang chủ | Quản Trị | [+] | Tổng kết | Đội */
+  /* Normal nav: Trang chủ | Lịch sử  | [+] | Tổng kết | Đội */
   return h('nav',{
     style:{ position:'fixed', bottom:0, left:0, right:0, zIndex:200, background:'rgba(8,9,15,0.95)', backdropFilter:'blur(24px)', WebkitBackdropFilter:'blur(24px)', borderTop:'1px solid '+T.border, display:'flex', alignItems:'center', paddingBottom:'8px' }
   },
     makeTab('home','Trang chủ',function(c){ return h('svg',sv(20,c),h('path',{d:'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'}),h('polyline',{points:'9 22 9 12 15 12 15 22'})); }),
-    makeTab('history','Lịch sử',function(c){ return h('svg',sv(20,c),h('circle',{cx:12,cy:12,r:10}),h('polyline',{points:'12 6 12 12 16 14'})); }),
+    isAdmin
+      ? makeTab('admin','Quản Trị',function(c){ return h('svg',sv(20,c),h('path',{d:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'})); })
+      : makeTab('history','Lịch sử',function(c){ return h('svg',sv(20,c),h('circle',{cx:12,cy:12,r:10}),h('polyline',{points:'12 6 12 12 16 14'})); }),
     h('div',{ style:{ flex:'0 0 72px', display:'flex', justifyContent:'center', paddingBottom:10 } },
       h('button',{ onClick:onFab, className:'btn-press', style:{ width:56, height:56, borderRadius:'50%', background:GRAD, border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 6px 32px rgba(123,97,255,0.6)', position:'relative', top:-12 } },
         h('svg',sv(22,'white'),h('line',{x1:12,y1:5,x2:12,y2:19}),h('line',{x1:5,y1:12,x2:19,y2:12}))
@@ -1190,6 +1194,141 @@ function TeamsScreen(props) {
 }
 
 /* ═══════════════════════════════════════════
+   ADMIN SCREEN
+═══════════════════════════════════════════ */
+var ADMIN_PHONE='0964003814';
+
+function AdminScreen(props) {
+  var user=props.user;
+  var au=useState([]); var allUsers=au[0]; var setAllUsers=au[1];
+  var ld=useState(true); var loading=ld[0]; var setLoading=ld[1];
+  var dc=useState(null); var delConfirm=dc[0]; var setDelConfirm=dc[1];
+  var av=useState('list'); var adminView=av[0]; var setAdminView=av[1];
+  /* add-user form */
+  var fn=useState(''); var fName=fn[0]; var setFName=fn[1];
+  var fp=useState(''); var fPhone=fp[0]; var setFPhone=fp[1];
+  var fe=useState(''); var formErr=fe[0]; var setFormErr=fe[1];
+  var fs=useState(false); var formSaving=fs[0]; var setFormSaving=fs[1];
+
+  var adminHeaders={ 'Content-Type':'application/json','x-admin-phone':user.phone };
+
+  function loadUsers(){
+    setLoading(true);
+    fetch('/api/admin/users',{ headers:{'x-admin-phone':user.phone} })
+      .then(function(r){ return r.json(); })
+      .then(function(rows){ setAllUsers(rows||[]); setLoading(false); })
+      .catch(function(e){ console.error(e); setLoading(false); });
+  }
+
+  useEffect(loadUsers,[]);
+
+  function doDelete(u){
+    fetch('/api/admin/users/'+encodeURIComponent(u.phone),{ method:'DELETE', headers:adminHeaders })
+      .then(function(){ setAllUsers(function(p){ return p.filter(function(x){ return x.phone!==u.phone; }); }); setDelConfirm(null); })
+      .catch(function(e){ alert('Lỗi: '+e.message); });
+  }
+
+  function doAdd(){
+    if (!fName.trim()||!fPhone.trim()){ setFormErr('Vui lòng điền đầy đủ tên và số điện thoại.'); return; }
+    setFormSaving(true); setFormErr('');
+    var body={ id:'usr_'+Date.now(), name:fName.trim(), phone:fPhone.trim(), createdAt:new Date().toISOString() };
+    fetch('/api/admin/users',{ method:'POST', headers:adminHeaders, body:JSON.stringify(body) })
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        if(j.error){ setFormErr(j.error); setFormSaving(false); return; }
+        setFName(''); setFPhone(''); setFormSaving(false);
+        setAdminView('list'); loadUsers();
+      })
+      .catch(function(e){ setFormErr(e.message); setFormSaving(false); });
+  }
+
+  function TrashIcon(){ return h('svg',sv(15,T.red),h('polyline',{points:'3 6 5 6 21 6'}),h('path',{d:'M19 6l-1 14H6L5 6'}),h('path',{d:'M10 11v6'}),h('path',{d:'M14 11v6'}),h('path',{d:'M9 6V4h6v2'})); }
+  function PlusIcon(){ return h('svg',sv(14,'white'),h('line',{x1:12,y1:5,x2:12,y2:19}),h('line',{x1:5,y1:12,x2:19,y2:12})); }
+  function RefreshIcon(){ return h('svg',sv(15,T.muted),h('polyline',{points:'23 4 23 10 17 10'}),h('polyline',{points:'1 20 1 14 7 14'}),h('path',{d:'M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15'})); }
+
+  /* ── Delete confirmation ── */
+  function DelDialog(){
+    if(!delConfirm) return null;
+    return h('div',{ style:{ position:'fixed', inset:0, zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:'0 24px', background:'rgba(0,0,0,0.6)' } },
+      h(Card,{ style:{ padding:28, maxWidth:360, width:'100%', textAlign:'center' } },
+        h('div',{ style:{ fontSize:40, marginBottom:12 } },'⚠️'),
+        h('div',{ style:{ color:T.text, fontWeight:800, fontSize:17, marginBottom:8 } },'Xoá tài khoản?'),
+        h('div',{ style:{ color:T.muted, fontSize:14, marginBottom:6, lineHeight:1.5 } }, delConfirm.name),
+        h('div',{ style:{ color:T.red, fontFamily:'monospace', fontSize:13, marginBottom:20 } }, delConfirm.phone),
+        h('div',{ style:{ color:T.muted, fontSize:12, marginBottom:22 } },'Tất cả dữ liệu (buổi chơi, đội, thành viên) của tài khoản này sẽ bị xoá vĩnh viễn.'),
+        h('div',{ style:{ display:'flex', gap:12 } },
+          h(Btn,{ onClick:function(){ setDelConfirm(null); }, variant:'ghost', full:true },'Huỷ'),
+          h(Btn,{ onClick:function(){ doDelete(delConfirm); }, variant:'danger', full:true },'Xoá')
+        )
+      )
+    );
+  }
+
+  /* ── Add user form ── */
+  if(adminView==='add'){
+    return h('div',{ className:'fi', style:{ padding:'20px 16px 120px', maxWidth:480, margin:'0 auto' } },
+      h(PageHeader,{ title:'Thêm Người Dùng', onBack:function(){ setAdminView('list'); setFormErr(''); } }),
+      h(Card,{ className:'fu', style:{ padding:20, marginBottom:14 } },
+        h(Inp,{ label:'Họ và Tên', value:fName, onChange:setFName, placeholder:'VD: Nguyễn Văn A' }),
+        h('div',{ style:{ height:14 } }),
+        h(Inp,{ label:'Số Điện Thoại', value:fPhone, onChange:setFPhone, placeholder:'VD: 0901234567' })
+      ),
+      formErr ? h('div',{ style:{ color:T.red, fontSize:13, margin:'-6px 0 14px', padding:'0 4px' } }, formErr) : null,
+      h('div',{ className:'fu s1' },
+        h(Btn,{ onClick:doAdd, disabled:formSaving||!fName.trim()||!fPhone.trim(), full:true, style:{ padding:'15px' } },
+          formSaving?h(Spinner):null, formSaving?' Đang lưu…':'✅ Thêm Người Dùng'
+        )
+      )
+    );
+  }
+
+  /* ── User list ── */
+  return h('div',{ className:'fi', style:{ padding:'20px 16px 120px', maxWidth:480, margin:'0 auto' } },
+    h(DelDialog),
+    h(PageHeader,{ title:'Quản Trị Người Dùng',
+      action:h('div',{ style:{ display:'flex', gap:8 } },
+        h('button',{ onClick:loadUsers, className:'btn-press', style:{ background:'none', border:'none', cursor:'pointer', padding:6, display:'flex' } }, h(RefreshIcon)),
+        h(Btn,{ onClick:function(){ setAdminView('add'); }, sm:true }, h(PlusIcon),' Thêm')
+      )
+    }),
+    /* stats strip */
+    h(Card,{ className:'fu', style:{ padding:'14px 20px', marginBottom:14, display:'flex', alignItems:'center', gap:16 } },
+      h('div',{ style:{ fontSize:32 } },'👤'),
+      h('div',null,
+        h('div',{ style:{ color:T.text, fontWeight:900, fontSize:22 } }, allUsers.length),
+        h('div',{ style:{ color:T.muted, fontSize:12 } },'người dùng đã đăng ký')
+      )
+    ),
+    loading
+      ? h('div',{ style:{ display:'flex', justifyContent:'center', padding:40 } }, h(Spinner))
+      : allUsers.length===0
+        ? h(Card,{ style:{ padding:'40px 20px', textAlign:'center' } },
+            h('div',{ style:{ fontSize:48, marginBottom:12 } },'📭'),
+            h('div',{ style:{ color:T.muted, fontSize:14 } },'Chưa có người dùng nào.')
+          )
+        : allUsers.map(function(u,i){
+            var isAdmin=u.phone===ADMIN_PHONE;
+            return h(Card,{ key:u.phone, className:'fu', style:{ padding:'14px 16px', marginBottom:10, animationDelay:i*0.04+'s' } },
+              h('div',{ style:{ display:'flex', alignItems:'center', gap:12 } },
+                h(Avatar,{ name:u.name, size:40 }),
+                h('div',{ style:{ flex:1, minWidth:0 } },
+                  h('div',{ style:{ display:'flex', alignItems:'center', gap:7, flexWrap:'wrap' } },
+                    h('span',{ style:{ color:T.text, fontWeight:800, fontSize:15 } }, u.name),
+                    isAdmin ? h('span',{ style:{ fontSize:10, fontWeight:800, color:T.p1, background:'rgba(123,97,255,0.12)', border:'1px solid rgba(123,97,255,0.25)', padding:'2px 8px', borderRadius:20 } },'Admin') : null
+                  ),
+                  h('div',{ style:{ color:T.muted, fontSize:12, fontFamily:'monospace', marginTop:3 } }, u.phone),
+                  h('div',{ style:{ color:T.muted, fontSize:11, marginTop:2 } }, 'Tham gia: '+new Date(u.created_at||u.createdAt||Date.now()).toLocaleDateString('vi-VN'))
+                ),
+                !isAdmin ? h('button',{ onClick:function(){ setDelConfirm(u); }, className:'btn-press',
+                  style:{ background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.18)', borderRadius:8, cursor:'pointer', padding:'7px 9px', display:'flex' }
+                }, h(TrashIcon)) : null
+              )
+            );
+          })
+  );
+}
+
+/* ═══════════════════════════════════════════
    ROOT APP
 ═══════════════════════════════════════════ */
 function App() {
@@ -1251,13 +1390,15 @@ function App() {
 
   if (screen==='login') return h(LoginScreen,{ onLogin:login });
 
-  var mainTabs=['home','history','summary','teams'];
+  var isAdmin=user && user.phone===ADMIN_PHONE;
+  var mainTabs=isAdmin?['home','admin','summary','teams']:['home','history','summary','teams'];
   var showNav=mainTabs.indexOf(screen)>=0;
   var content=null;
   if      (screen==='home')    content=h(HomeScreen,         { user:user, sessions:sessions, onNav:nav });
   else if (screen==='history') content=h(HistoryScreen,      { sessions:sessions, onNav:nav });
   else if (screen==='summary') content=h(SummaryScreen,      { sessions:sessions });
   else if (screen==='teams')   content=h(TeamsScreen,        { user:user, teams:teams, onTeamsChange:setTeams, allMembers:members, onAddMember:addMember, onMembersRefresh:setMembers });
+  else if (screen==='admin'&&isAdmin) content=h(AdminScreen, { user:user });
   else if (screen==='create')  content=h(CreateSessionScreen,{ user:user, teams:teams, onSave:onCalc, onBack:function(){ setDraft(null); setScreen('home'); }, draft:draft, allMembers:members, onAddMember:addMember, onMembersRefresh:setMembers });
   else if (screen==='result'&&pending) content=h(ResultScreen,{ session:pending, onConfirm:onSave, onBack:function(){ setScreen('create'); } });
   else if (screen==='detail'&&params.session) content=h(DetailScreen,{ session:params.session, onBack:function(){ setScreen('history'); }, onDelete:onDel });
@@ -1265,7 +1406,7 @@ function App() {
   return h('div',{ style:{ background:T.bg, minHeight:'100vh', fontFamily:"'Plus Jakarta Sans',system-ui,sans-serif", color:T.text } },
     showNav ? h(TopBar,{ user:user, onLogout:logout, serverOnline:serverOnline }) : null,
     content,
-    showNav ? h(NavBar,{ active:screen, onNav:nav, onFab:function(){ nav('create'); } }) : null
+    showNav ? h(NavBar,{ active:screen, onNav:nav, onFab:function(){ nav('create'); }, isAdmin:isAdmin }) : null
   );
 }
 

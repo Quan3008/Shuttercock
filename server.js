@@ -310,6 +310,56 @@ app.delete('/api/members/:id', async (req, res) => {
   } catch (e) { console.error('deleteMember:', e.message); res.status(500).json({ error: e.message }); }
 });
 
+/* ── API: Admin ─────────────────────────────────────────────── */
+const ADMIN_PHONE = '0964003814';
+
+function requireAdmin(req, res) {
+  const phone = req.headers['x-admin-phone'] || '';
+  if (phone.trim() !== ADMIN_PHONE) {
+    res.status(403).json({ error: 'Forbidden' });
+    return false;
+  }
+  return true;
+}
+
+app.get('/api/admin/users', async (req, res) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+    const sql = getSql();
+    const rows = await sql`SELECT * FROM users ORDER BY created_at DESC`;
+    res.json(rows);
+  } catch (e) { console.error('admin/getUsers:', e.message); res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/admin/users', async (req, res) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+    const { id, name, phone, createdAt } = req.body;
+    if (!id || !name || !phone) return res.status(400).json({ error: 'id, name, phone required' });
+    const sql = getSql();
+    await sql`
+      INSERT INTO users (id, name, phone, created_at)
+      VALUES (${id}, ${name}, ${phone.trim()}, ${createdAt || new Date().toISOString()})
+      ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name`;
+    res.json({ ok: true });
+  } catch (e) { console.error('admin/addUser:', e.message); res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/admin/users/:phone', async (req, res) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+    const phone = decodeURIComponent(req.params.phone);
+    if (phone === ADMIN_PHONE) return res.status(400).json({ error: 'Cannot delete admin account' });
+    const sql = getSql();
+    await sql`DELETE FROM team_memberships WHERE user_phone = ${phone}`;
+    await sql`DELETE FROM members WHERE created_by_user_phone = ${phone}`;
+    await sql`DELETE FROM sessions WHERE user_phone = ${phone}`;
+    await sql`DELETE FROM teams WHERE owner_phone = ${phone}`;
+    await sql`DELETE FROM users WHERE phone = ${phone}`;
+    res.json({ ok: true });
+  } catch (e) { console.error('admin/deleteUser:', e.message); res.status(500).json({ error: e.message }); }
+});
+
 /* ── Health check ───────────────────────────────────────────── */
 app.get('/api/health', async (_req, res) => {
   try {
